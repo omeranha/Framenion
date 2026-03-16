@@ -286,9 +286,14 @@ public partial class MainWindow : Window
 			process.StandardInput.Close();
 		} catch { }
 
+		var stdoutTask = process.StandardOutput.ReadToEndAsync();
+		var stderrTask = process.StandardError.ReadToEndAsync();
+		await process.WaitForExitAsync();
+		var stdout = await stdoutTask;
+		var stderr = await stderrTask;
 		if (process.ExitCode != 0) {
-			var stdout = await process.StandardOutput.ReadToEndAsync();
-			MessageBox.Show(this, "warframe-api-helper error", stdout);
+			var msg = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr + Environment.NewLine + stdout;
+			MessageBox.Show(this, "warframe-api-helper error", msg);
 			return;
 		}
 		await ParseInfo();
