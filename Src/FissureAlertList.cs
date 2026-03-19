@@ -8,41 +8,41 @@ using System.Text.Json.Serialization;
 
 namespace framenion.Src;
 
-public sealed class FissureFilterEntry
+public sealed class FissureAlertEntry
 {
 	public event PropertyChangedEventHandler? PropertyChanged;
 
-	private string _type = string.Empty;
-	private string _relicTier = string.Empty;
-	private string _planet = string.Empty;
-	private string _mode = string.Empty;
+	private string type = string.Empty;
+	private string relicTier = string.Empty;
+	private string planet = string.Empty;
+	private string mode = string.Empty;
 
 	[JsonPropertyName("type")]
 	public string Type
 	{
-		get => _type;
-		set => SetField(ref _type, value);
+		get => type;
+		set => SetField(ref type, value);
 	}
 
 	[JsonPropertyName("relic_tier")]
 	public string RelicTier
 	{
-		get => _relicTier;
-		set => SetField(ref _relicTier, value);
+		get => relicTier;
+		set => SetField(ref relicTier, value);
 	}
 
 	[JsonPropertyName("planet")]
 	public string Planet
 	{
-		get => _planet;
-		set => SetField(ref _planet, value);
+		get => planet;
+		set => SetField(ref planet, value);
 	}
 
 	[JsonPropertyName("mode")]
 	public string Mode
 	{
-		get => _mode;
-		set => SetField(ref _mode, value);
+		get => mode;
+		set => SetField(ref mode, value);
 	}
 
 	private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -54,11 +54,11 @@ public sealed class FissureFilterEntry
 	}
 }
 
-public static class FissureAlertFilter
+public static class FissureAlertList
 {
 	private static readonly string DataFilePath = Path.Combine(GameData.appDataDir, "fissures_filter.json");
 
-	public static IReadOnlyList<FissureFilterEntry> Load()
+	public static IReadOnlyList<FissureAlertEntry> Load()
 	{
 		try {
 			if (!File.Exists(DataFilePath)) return [];
@@ -66,9 +66,9 @@ public static class FissureAlertFilter
 			using var doc = JsonDocument.Parse(stream);
 			if (doc.RootElement.ValueKind != JsonValueKind.Array) return [];
 
-			var list = new List<FissureFilterEntry>();
+			var list = new List<FissureAlertEntry>();
 			foreach (var el in doc.RootElement.EnumerateArray()) {
-				list.Add(new FissureFilterEntry {
+				list.Add(new FissureAlertEntry {
 					Type = ReadString(el, "type", "Any"),
 					RelicTier = ReadString(el, "relic_tier", "Any"),
 					Planet = ReadString(el, "planet", "Any"),
@@ -81,7 +81,7 @@ public static class FissureAlertFilter
 		}
 	}
 
-	public static bool MatchesAny(VoidFissure fissure, IReadOnlyList<FissureFilterEntry> filters)
+	public static bool MatchesAny(VoidFissure fissure, IReadOnlyList<FissureAlertEntry> filters)
 	{
 		if (filters.Count == 0) return false;
 
@@ -92,7 +92,7 @@ public static class FissureAlertFilter
 		return false;
 	}
 
-	private static bool Matches(VoidFissure fissure, FissureFilterEntry f)
+	private static bool Matches(VoidFissure fissure, FissureAlertEntry f)
 	{
 		static bool IsAny(string? s) => string.IsNullOrWhiteSpace(s) || s.Equals("Any", StringComparison.OrdinalIgnoreCase);
 

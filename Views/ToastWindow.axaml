@@ -9,7 +9,7 @@
         Topmost="True"
         Background="Transparent">
   <Border Background="#1E1E1E"
-          BorderBrush="#FFD700"
+          BorderBrush="#000000"
           BorderThickness="2"
           CornerRadius="10"
           Padding="12">

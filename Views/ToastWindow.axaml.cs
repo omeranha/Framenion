@@ -12,17 +12,25 @@ using System.Threading.Tasks;
 
 namespace framenion;
 
+public enum ToastAnchor
+{
+	BottomRightOfScreen,
+	TopRightOfScreen,
+	BottomRightOfOwnerWindow,
+	TopRightOfOwnerWindow
+}
+
 public partial class ToastWindow : Window
 {
-	private static readonly object _gate = new();
-	private static readonly List<ToastWindow> _active = [];
-	private static int _defaultMargin = 12;
-	private static int _defaultSpacing = 10;
+	private static readonly object gate = new();
+	private static readonly List<ToastWindow> active = [];
+	private static int defaultMargin = 12;
+	private static int defaultSpacing = 10;
+	private ToastAnchor anchor = ToastAnchor.BottomRightOfScreen;
 
 	private static readonly Animation FadeIn = new() {
 		Duration = TimeSpan.FromMilliseconds(140),
-		Children =
-		{
+		Children = {
 			new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 0d) } },
 			new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 1d) } },
 		}
@@ -33,39 +41,35 @@ public partial class ToastWindow : Window
 	public ToastWindow()
 	{
 		InitializeComponent();
-
-		// Needed to support TranslateTransform animation.
 		RenderTransform ??= new TranslateTransform();
 		RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
-
 		PointerPressed += async (_, _) => await DismissAsync(reposition: true);
 		Closed += (_, _) => OnToastClosed(this);
 	}
 
-	public static Task ShowToastAsync(
-		Window owner,
-		string title,
-		string body,
-		TimeSpan? duration = null,
+	public static Task ShowToastAsync(Window owner, string title, string body, TimeSpan? duration = null, ToastAnchor anchor = ToastAnchor.BottomRightOfScreen,
 		int margin = 12,
 		int spacing = 10)
 	{
 		duration ??= TimeSpan.FromSeconds(6);
-		_defaultMargin = margin;
-		_defaultSpacing = spacing;
+		defaultMargin = margin;
+		defaultSpacing = spacing;
 
 		var toast = new ToastWindow { Topmost = true };
 		toast.TitleText.Text = title;
 		toast.BodyText.Text = body;
+		toast.anchor = anchor;
 
-		try { toast.ShowActivated = false; } catch { }
+		try {
+			toast.ShowActivated = false;
+		} catch { }
 
-		lock (_gate) {
-			_active.Add(toast);
+		lock (gate) {
+			active.Add(toast);
 		}
 
 		toast.Opened += async (_, _) => {
-			RepositionToasts(owner, margin, spacing);
+			RepositionToasts(owner, anchor, margin, spacing);
 			await FadeIn.RunAsync(toast, default);
 		};
 
@@ -90,31 +94,32 @@ public partial class ToastWindow : Window
 
 		// Slide the *content* right, then close the window.
 		double deltaX = (Width > 0 ? Width : Bounds.Width);
-		if (deltaX <= 0) deltaX = 360;
-		deltaX += _defaultMargin;
+		if (deltaX <= 0) {
+			deltaX = 360;
+		}
+		deltaX += defaultMargin;
 
 		var slideOutRight = CreateSlideOutRight(deltaX);
 
 		await slideOutRight.RunAsync(this, default);
 
-		if (IsVisible)
+		if (IsVisible) {
 			Close();
+		}
 
-		if (reposition && Owner is Window owner)
-			RepositionToasts(owner, _defaultMargin, _defaultSpacing);
+		if (reposition && Owner is Window owner) {
+			RepositionToasts(owner, ToastAnchor.BottomRightOfScreen, defaultMargin, defaultSpacing);
+		}
 	}
 
 	private static Animation CreateSlideOutRight(double deltaX) => new() {
 		Duration = SlideOutDuration,
-		Children =
-		{
-			new KeyFrame
-			{
+		Children = {
+			new KeyFrame {
 				Cue = new Cue(0d),
 				Setters = { new Setter(TranslateTransform.XProperty, 0d) }
 			},
-			new KeyFrame
-			{
+			new KeyFrame {
 				Cue = new Cue(1d),
 				Setters = { new Setter(TranslateTransform.XProperty, deltaX) }
 			},
@@ -123,31 +128,44 @@ public partial class ToastWindow : Window
 
 	private static void OnToastClosed(ToastWindow toast)
 	{
-		lock (_gate) {
-			_active.Remove(toast);
+		lock (gate) {
+			active.Remove(toast);
 		}
 	}
 
-	private static void RepositionToasts(Window owner, int margin, int spacing)
+	private static void RepositionToasts(Window owner, ToastAnchor anchor, int margin, int spacing)
 	{
 		ToastWindow[] toasts;
-		lock (_gate) {
-			toasts = _active.Where(t => t.IsVisible).ToArray();
+		lock (gate) {
+			toasts = [.. active.Where(t => t.IsVisible)];
 		}
 
-		if (toasts.Length == 0)
-			return;
+		if (toasts.Length == 0) return;
 
-		var screen = owner.Screens.ScreenFromWindow(owner) ?? owner.Screens.Primary;
-		if (screen is null)
-			return;
+		PixelRect area;
+		if (anchor is ToastAnchor.BottomRightOfOwnerWindow or ToastAnchor.TopRightOfOwnerWindow) {
+			var ownerPos = owner.Position;
+			var ownerSize = owner.Bounds.Size;
 
-		var wa = screen.WorkingArea;
+			var scale = owner.RenderScaling;
+			var w = (int)Math.Ceiling(ownerSize.Width * scale);
+			var h = (int)Math.Ceiling(ownerSize.Height * scale);
+			area = new PixelRect(ownerPos, new PixelSize(w, h));
+		} else {
+			var screen = owner.Screens.ScreenFromWindow(owner) ?? owner.Screens.Primary;
+			if (screen is null) return;
 
+			area = screen.WorkingArea;
+		}
+
+		bool stackDown = anchor is ToastAnchor.TopRightOfScreen or ToastAnchor.TopRightOfOwnerWindow;
 		for (int i = 0; i < toasts.Length; i++) {
 			var toast = toasts[i];
-			int x = wa.X + wa.Width - (int)Math.Ceiling(toast.Width) - margin;
-			int y = wa.Y + wa.Height - margin - (int)Math.Ceiling(toast.Height) - i * ((int)Math.Ceiling(toast.Height) + spacing);
+			int toastW = (int)Math.Ceiling(toast.Width);
+			int toastH = (int)Math.Ceiling(toast.Height);
+			int x = area.X + area.Width - toastW - margin;
+			// top-right, stack downward or bottom-right, stack upward
+			int y = stackDown ? area.Y + margin + i * (toastH + spacing) : area.Y + area.Height - margin - toastH - i * (toastH + spacing);
 			toast.Position = new PixelPoint(x, y);
 		}
 	}

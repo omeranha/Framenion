@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -17,18 +18,18 @@ namespace framenion.Src;
 
 public static class GameData
 {
-	public static readonly Dictionary<string, (string, string)> relicType = new() {
-		{ "VoidT1", ("Lith", "#72523c") },
-		{ "VoidT2", ("Meso", "#917147") },
-		{ "VoidT3", ("Neo", "#c9c3c4") },
-		{ "VoidT4", ("Axi", "#FFD700") },
-		{ "VoidT5", ("Requiem", "#e80c1e") },
-		{ "VoidT6", ("Omnia", "#FFFFFF") }
+	public static readonly IReadOnlyDictionary<string, (string, string)> relicType = new Dictionary<string, (string, string)>(StringComparer.Ordinal) {
+		["VoidT1"] = ("Lith", "#72523c"),
+		["VoidT2"] = ("Meso", "#917147"),
+		["VoidT3"] = ("Neo", "#c9c3c4"),
+		["VoidT4"] = ("Axi", "#FFD700"),
+		["VoidT5"] = ("Requiem", "#e80c1e"),
+		["VoidT6"] = ("Omnia", "FFFFFF")
 	};
 	public static readonly string appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Framenion");
 	public static readonly string cacheDir = Path.Combine(appDataDir, "cache");
 	public static readonly string iconsCacheDir = Path.Combine(cacheDir, "icons");
-	private static readonly SemaphoreSlim _iconDownloadSemaphore = new(10, 10);
+	private static readonly SemaphoreSlim iconDownloadSemaphore = new(10, 10);
 	public static readonly HttpClient httpClient = new() {
 		BaseAddress = new Uri("https://browse.wf/"),
 	};
@@ -87,16 +88,17 @@ public static class GameData
 	{
 		var iconPath = GetLocalIconPath(icon);
 		if (File.Exists(iconPath)) return;
-		await _iconDownloadSemaphore.WaitAsync();
+
+		await iconDownloadSemaphore.WaitAsync();
 		try {
 			if (File.Exists(iconPath)) return;
-			var iconResp = await httpClient.GetAsync(icon);
+			using var iconResp = await httpClient.GetAsync(icon, HttpCompletionOption.ResponseHeadersRead);
 			iconResp.EnsureSuccessStatusCode();
 			await using var iconStream = await iconResp.Content.ReadAsStreamAsync();
 			await using var fileStream = File.Create(iconPath);
 			await iconStream.CopyToAsync(fileStream);
 		} finally {
-			_iconDownloadSemaphore.Release();
+			iconDownloadSemaphore.Release();
 		}
 	}
 
@@ -117,10 +119,14 @@ public static class GameData
 		var exportCacheFile = Path.Combine(cacheDir, file + ".json");
 		if (!File.Exists(exportCacheFile)) {
 			try {
-				var resp = await httpClient.GetAsync("https://raw.githubusercontent.com/calamity-inc/warframe-public-export-plus/refs/heads/senpai/" + file + ".json");
+				var url = "https://raw.githubusercontent.com/calamity-inc/warframe-public-export-plus/refs/heads/senpai/" + file + ".json";
+
+				using var resp = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
 				resp.EnsureSuccessStatusCode();
-				var json = await resp.Content.ReadAsStringAsync();
-				await File.WriteAllTextAsync(exportCacheFile, json);
+
+				await using var inStream = await resp.Content.ReadAsStreamAsync();
+				await using var outStream = File.Create(exportCacheFile);
+				await inStream.CopyToAsync(outStream);
 			} catch {
 				MessageBox.Show(window, "Error", "Failed to download file: " + file);
 			}
@@ -276,6 +282,109 @@ public static class GameData
 			}
 		} catch (Exception ex) {
 			MessageBox.Show(window, "Error", "Failed to load exports: " + ex.Message);
+		}
+	}
+
+	public static int GetTierSortKey(string voidTier)
+	{
+		if (voidTier.StartsWith("VoidT", StringComparison.Ordinal) && int.TryParse(voidTier.AsSpan("VoidT".Length), out var n)) {
+			return n;
+		}
+		return 0;
+	}
+
+	public static async Task ExtractGameInfo(Window window)
+	{
+		Directory.CreateDirectory(GameData.appDataDir);
+		bool isWindows = OperatingSystem.IsWindows();
+		var exeFileName = isWindows ? "warframe-api-helper.exe" : "warframe-api-helper";
+		var exePath = Path.Combine(GameData.appDataDir, exeFileName);
+		if (!File.Exists(exePath)) {
+			if (await MessageBox.AskYesNo(window, "Download required component", "Do you want to download warframe-api-helper from its official GitHub repository?")) {
+				string url = isWindows
+					? "https://github.com/Sainan/warframe-api-helper/releases/download/1.1.1/warframe-api-helper.exe"
+					: "https://github.com/Sainan/warframe-api-helper/releases/download/1.1.1/Linux.zip";
+				var tempPath = Path.Combine(GameData.appDataDir, Path.GetRandomFileName());
+				try {
+					using var download = await GameData.httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+					download.EnsureSuccessStatusCode();
+					await using (var inStream = await download.Content.ReadAsStreamAsync())
+					await using (var outStream = File.Create(tempPath)) {
+						await inStream.CopyToAsync(outStream);
+					}
+
+					if (!isWindows && url.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) {
+						try {
+							System.IO.Compression.ZipFile.ExtractToDirectory(tempPath, GameData.appDataDir);
+							var extracted = Directory.EnumerateFiles(GameData.appDataDir, "warframe-api-helper*", SearchOption.AllDirectories)
+								.FirstOrDefault(f => Path.GetFileName(f).StartsWith("warframe-api-helper", StringComparison.Ordinal)) ?? throw new FileNotFoundException("Extracted helper not found.");
+							if (File.Exists(exePath)) File.Delete(exePath);
+							File.Move(extracted, exePath);
+						} finally {
+							try { File.Delete(tempPath); } catch { }
+						}
+
+						if (!isWindows) {
+							try {
+								using var chmod = new Process {
+									StartInfo = new ProcessStartInfo {
+										FileName = "chmod",
+										Arguments = $"+x \"{exePath}\"",
+										UseShellExecute = false,
+										CreateNoWindow = true
+									}
+								};
+								chmod.Start();
+								await chmod.WaitForExitAsync();
+							} catch {
+								// todo: test proceed but the helper might fail without exec bit
+							}
+						}
+					} else {
+						if (File.Exists(exePath)) File.Delete(exePath);
+						File.Move(tempPath, exePath);
+					}
+				} catch (Exception ex) {
+					try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+					MessageBox.Show(window, "Error", "Failed to download component: " + ex.Message);
+					return;
+				}
+			}
+		}
+
+		if (!await MessageBox.AskYesNo(window, "Disclaimer", "By confirming, you acknowledge and agree to use warframe-api-helper to retrieve your inventory data at your own risk.", "Confirm", "Close")) {
+			MessageBox.Show(window, "Info", "Operation cancelled by user.");
+			return;
+		}
+
+		using var process = new Process {
+			StartInfo = new ProcessStartInfo {
+				FileName = exePath,
+				WorkingDirectory = GameData.appDataDir,
+				UseShellExecute = false,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true,
+				RedirectStandardInput = true,
+				CreateNoWindow = true,
+			}
+		};
+
+		process.Start();
+		try {
+			await process.StandardInput.WriteLineAsync();
+			await process.StandardInput.FlushAsync();
+			process.StandardInput.Close();
+		} catch { }
+
+		var stdoutTask = process.StandardOutput.ReadToEndAsync();
+		var stderrTask = process.StandardError.ReadToEndAsync();
+		await process.WaitForExitAsync();
+		var stdout = await stdoutTask;
+		var stderr = await stderrTask;
+		if (process.ExitCode != 0) {
+			var msg = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr + Environment.NewLine + stdout;
+			MessageBox.Show(window, "warframe-api-helper error", msg);
+			return;
 		}
 	}
 }

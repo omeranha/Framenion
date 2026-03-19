@@ -1,6 +1,4 @@
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Markup.Xaml;
 using framenion.Src;
 using System;
 using System.Collections.Generic;
@@ -12,15 +10,15 @@ using System.Text.Json;
 
 namespace framenion;
 
-public partial class FissuresFilter : Window
+public partial class FissuresAlert : Window
 {
 	private readonly string dataFilePath = Path.Combine(GameData.appDataDir, "fissures_filter.json");
-	public ObservableCollection<FissureFilterEntry> Filters {  get; set; } = [];
+	public ObservableCollection<FissureAlertEntry> Filters {  get; set; } = [];
 	public List<string> MissionTypes { get; } = ["Any"];
 	public List<string> Planets { get; } = ["Any"];
 	public List<string> FissureTypes { get; } = ["Any"];
 	public List<string> Modes { get; } = ["Any", "Normal", "Steel Path"];
-	public FissuresFilter()
+	public FissuresAlert()
 	{
 		InitializeComponent();
 		this.DataContext = this;
@@ -64,7 +62,7 @@ public partial class FissuresFilter : Window
 				string relic = el.TryGetProperty("relic_tier", out var rEl) && rEl.ValueKind == JsonValueKind.String ? rEl.GetString() ?? string.Empty : string.Empty;
 				string planet = el.TryGetProperty("planet", out var pEl) && pEl.ValueKind == JsonValueKind.String ? pEl.GetString() ?? string.Empty : string.Empty;
 				string mode = el.TryGetProperty("mode", out var mEl) && mEl.ValueKind == JsonValueKind.String ? mEl.GetString() ?? string.Empty : string.Empty;
-				Filters.Add(new FissureFilterEntry {
+				Filters.Add(new FissureAlertEntry {
 					Type = type,
 					RelicTier = relic,
 					Planet = planet,
@@ -93,14 +91,15 @@ public partial class FissuresFilter : Window
 			}
 			writer.WriteEndArray();
 			writer.Flush();
+			_ = ToastWindow.ShowToastAsync(this, "Fissure Alert List", "Saved", TimeSpan.FromSeconds(5), ToastAnchor.TopRightOfOwnerWindow);
 		} catch (Exception ex) {
 			MessageBox.Show(this, "Error", "Failed to save filters: " + ex.Message);
 		}
 	}
 
-	private void OnAddFilterClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+	private void OnAddEntryClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
 	{
-		Filters.Add(new FissureFilterEntry {
+		Filters.Add(new FissureAlertEntry {
 			Type = "Any",
 			RelicTier = "Any",
 			Planet = "Any",
@@ -108,9 +107,9 @@ public partial class FissuresFilter : Window
 		});
 	}
 
-	private void OnRemoveFilterClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+	private void OnRemoveEntryClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
 	{
-		if (sender is Button btn && btn.DataContext is FissureFilterEntry entry) {
+		if (sender is Button btn && btn.DataContext is FissureAlertEntry entry) {
 			Filters.Remove(entry);
 		}
 	}

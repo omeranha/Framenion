@@ -4,6 +4,7 @@ using Avalonia.Media;
 using System;
 using System.ComponentModel;
 using System.Globalization;
+using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -39,25 +40,25 @@ public class VoidFissure : INotifyPropertyChanged
 		}
 	}
 
-	private bool _isAlertMatch;
-	public bool IsAlertMatch
+	private bool _shouldNotify;
+	public bool ShouldNotify
 	{
-		get => _isAlertMatch;
+		get => _shouldNotify;
 		set {
-			if (_isAlertMatch == value) return;
-			_isAlertMatch = value;
-			OnPropertyChanged(nameof(IsAlertMatch));
+			if (_shouldNotify == value) return;
+			_shouldNotify = value;
+			OnPropertyChanged(nameof(ShouldNotify));
 			OnPropertyChanged(nameof(RowBackground));
 			OnPropertyChanged(nameof(RowBorderBrush));
 			OnPropertyChanged(nameof(RowBorderThickness));
 		}
 	}
 
-	public IBrush RowBackground => IsAlertMatch ? Brush.Parse("#332B00") : Brush.Parse("#252525");
+	public IBrush RowBackground => ShouldNotify ? Brush.Parse("#332B00") : Brush.Parse("#252525");
 
-	public IBrush RowBorderBrush => IsAlertMatch ? Brush.Parse("#FFD700") : Brush.Parse("#4A4A4A");
+	public IBrush RowBorderBrush => ShouldNotify ? Brush.Parse("#FFD700") : Brush.Parse("#4A4A4A");
 
-	public Thickness RowBorderThickness => IsAlertMatch ? new Thickness(2) : new Thickness(1);
+	public Thickness RowBorderThickness => ShouldNotify ? new Thickness(2) : new Thickness(1);
 
 	public event PropertyChangedEventHandler? PropertyChanged;
 	public void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
@@ -67,11 +68,12 @@ public class VoidFissure : INotifyPropertyChanged
 	public static async Task LoadVoidFissures(Window window)
 	{
 		try {
-			var response = await GameData.httpClient.GetAsync("https://api.warframe.com/cdn/worldState.php");
+			using var response = await GameData.httpClient.GetAsync("https://api.warframe.com/cdn/worldState.php",HttpCompletionOption.ResponseHeadersRead);
 			response.EnsureSuccessStatusCode();
 			await using var stream = await response.Content.ReadAsStreamAsync();
 			using var worldState = await JsonDocument.ParseAsync(stream);
 			if (!worldState.RootElement.TryGetProperty("ActiveMissions", out var activeMissions) || activeMissions.ValueKind != JsonValueKind.Array) return;
+
 			GameData.fissures.Clear();
 			var culture = new CultureInfo("en-US", false).TextInfo;
 			foreach (var mission in activeMissions.EnumerateArray()) {
@@ -95,6 +97,7 @@ public class VoidFissure : INotifyPropertyChanged
 					MinLevel = nodeInfo.GetProperty("minEnemyLevel").GetInt32() + baseLvl + 5,
 					MaxLevel = nodeInfo.GetProperty("maxEnemyLevel").GetInt32() + baseLvl + 5
 				};
+
 				GameData.fissures.Add(fissure);
 			}
 		} catch (Exception ex) {

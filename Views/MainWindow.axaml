@@ -39,7 +39,8 @@
                                 Click="OnRefreshInfoClickAsync"
                                 Classes="filterButton"
                                 Padding="10,6"
-                                FontSize="14"/>
+                                FontSize="14"
+                                ToolTip.Tip="Refresh Inventory Info"/>
                             <Image Name="PlayerIcon"
                                    Source=""
                                    Width="32" Height="32"
@@ -347,7 +348,7 @@
                                 Padding="10,6"
                                 Margin="0,0,5,0"
                                 Classes="filterButton"
-                                ToolTip.Tip="Fissures Filter">
+                                ToolTip.Tip="Fissure Alert Settings">
                             <Image Source="avares://framenion/assets/filter.png"
                                        Width="15" Height="17"
                                        VerticalAlignment="Center"/>
