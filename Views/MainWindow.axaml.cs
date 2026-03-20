@@ -19,7 +19,6 @@ namespace framenion;
 
 public partial class MainWindow : Window
 {
-	private readonly string[] files = ["dict.en", "ExportWarframes", "ExportRecipes", "ExportWeapons", "ExportRegions", "ExportResources", "ExportMisc", "ExportSentinels", "ExportTextIcons", "ExportMissionTypes", "ExportFactions"];
 	public ObservableCollection<Item> displayedItems = [];
 	public ObservableCollection<VoidFissure> displayedFissures = [];
 
@@ -36,13 +35,16 @@ public partial class MainWindow : Window
 	private IReadOnlyList<FissureAlertEntry> loadedFissureAlertList = [];
 
 	private CancellationTokenSource? searchDebounce;
+	private CancellationTokenSource? EElogTail;
+
+	private AppSettings appSettings = new();
 
 	public MainWindow()
 	{
 		Directory.CreateDirectory(GameData.cacheDir);
 		Directory.CreateDirectory(GameData.iconsCacheDir);
-		Initialized += async (s, e) => {
-			await InitializeAsync();
+		Opened += async (s, e) => {
+			_ = InitializeAsync();
 		};
 
 		InitializeComponent(true);
@@ -53,37 +55,49 @@ public partial class MainWindow : Window
 	private async Task InitializeAsync()
 	{
 		try {
-			var loadTasks = files.Select(f => GameData.LoadFile(this, f, GameData.cacheDir));
-			await Task.WhenAll(loadTasks);
+			appSettings = await framenion.Src.AppSettings.LoadAsync();
+			await LoadNotifiedFissures();
+			loadedFissureAlertList = FissureAlertList.Load();
 
-			GameData.fissureRefreshTimer = new DispatcherTimer {
-				Interval = TimeSpan.FromMinutes(1)
-			};
-			GameData.fissureRefreshTimer.Tick += async (s, e) => {
+			GameData.fissureRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+			GameData.fissureRefreshTimer.Tick += async (_, _) => {
 				await VoidFissure.LoadVoidFissures(this);
 				await RefreshFissuresList();
 			};
 
-			GameData.fissureUpdateTimer = new DispatcherTimer {
-				Interval = TimeSpan.FromSeconds(1)
-			};
-			GameData.fissureUpdateTimer.Tick += (s, e) => UpdateFissureTimers();
-			GameData.fissureUpdateTimer?.Start();
-			GameData.fissureRefreshTimer?.Start();
+			GameData.fissureUpdateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+			GameData.fissureUpdateTimer.Tick += (_, _) => UpdateFissureTimers();
 
-			await LoadNotifiedFissures();
-			loadedFissureAlertList = FissureAlertList.Load();
+			GameData.fissureUpdateTimer.Start();
+			GameData.fissureRefreshTimer.Start();
 
-			await VoidFissure.LoadVoidFissures(this);
-			await RefreshFissuresList();
+			StartEeLogTail();
 
-			await GameData.LoadExports(this);
-			await ParseInfo();
-
-			RefreshItemsList();
+			_ = InitializeDataInBackgroundAsync();
 		} catch (Exception ex) {
 			MessageBox.Show(this, "Error", "Failed to initialize application: " + ex.Message);
 		}
+	}
+
+	private async Task InitializeDataInBackgroundAsync()
+	{
+		string[] firstLoad = [ "dict.en", "ExportRegions", "ExportMissionTypes", "ExportFactions" ];
+		var loadTasks = firstLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir));
+		await Task.WhenAll(loadTasks);
+		await VoidFissure.LoadVoidFissures(this);
+		await RefreshFissuresList();
+
+		string[] secondLoad = [ "ExportWarframes", "ExportRecipes", "ExportWeapons", "ExportResources", "ExportMisc", "ExportSentinels", "ExportTextIcons" ];
+		loadTasks = secondLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir));
+		await Task.WhenAll(loadTasks);
+
+		await Task.Run(async () => {
+			await GameData.LoadExports(this);
+		});
+		await Dispatcher.UIThread.InvokeAsync(async () => {
+			await ParseInfo();
+			RefreshItemsList();
+		});
 	}
 
 	private async Task ParseInfo()
@@ -98,20 +112,17 @@ public partial class MainWindow : Window
 		if (root.ValueKind != JsonValueKind.Object) return;
 		GameData.mainRoot = root;
 
-		var accountId = TryReadAccountIdFromEeLog(EElog);
-		if (!string.IsNullOrWhiteSpace(accountId)) {
-			using var userResp = await GameData.httpClient.GetAsync($"http://content.warframe.com/dynamic/getProfileViewingData.php?playerId={accountId}", HttpCompletionOption.ResponseHeadersRead);
-
-			userResp.EnsureSuccessStatusCode();
-			await using var userStream = await userResp.Content.ReadAsStreamAsync();
-			using var json = await JsonDocument.ParseAsync(userStream);
-			PlayerName.Text = json.RootElement.GetProperty("Results")[0].GetProperty("DisplayName").ToString()?[..^1];
+		var loggedInName = ReadAccountName(EElog);
+		if (!string.IsNullOrWhiteSpace(loggedInName)) {
+			PlayerName.Text = loggedInName;
 		}
 
-		if (root.TryGetProperty("PremiumCredits", out var platinum) && platinum.TryGetInt64(out var p))
+		if (root.TryGetProperty("PremiumCredits", out var platinum) && platinum.TryGetInt64(out var p)) {
 			PlatinumText.Text = p.ToString("N0");
-		if (root.TryGetProperty("RegularCredits", out var credits) && credits.TryGetInt64(out var c))
+		}
+		if (root.TryGetProperty("RegularCredits", out var credits) && credits.TryGetInt64(out var c)) {
 			CreditsText.Text = c.ToString("N0");
+		}
 
 		root.TryGetProperty("PlayerLevel", out var mr);
 		var mr_str = (mr.GetUInt16() > 30) ? "L" + (mr.GetUInt16() - 30) : mr.ToString();
@@ -171,18 +182,11 @@ public partial class MainWindow : Window
 			if (e.TryGetProperty("ItemType", out var t) && t.GetString() is string tStr)
 				recipesByType[tStr] = e;
 
-		// (7) cache xp requirement calculation
-		var xpToMasterCache = new Dictionary<string, long>(StringComparer.Ordinal);
-
 		foreach (var item in GameData.itemsList) {
 			var resultType = item.Type;
 
 			xpByType.TryGetValue(resultType, out var xpForItem);
-			if (!xpToMasterCache.TryGetValue(resultType, out var requiredXp)) {
-				requiredXp = XpToMaster(resultType);
-				xpToMasterCache[resultType] = requiredXp;
-			}
-
+			var requiredXp = XpToMaster(resultType);
 			if (xpForItem >= requiredXp) item.Mastered = true;
 			if (ownedTypes.Contains(resultType)) item.BorderColor = "#3aba29";
 
@@ -195,8 +199,7 @@ public partial class MainWindow : Window
 				var count = ingred_entry.GetProperty("ItemCount");
 				ingred.OwnedCount = count.GetInt32();
 
-				if (GameData.exportRecipes.TryGetValue(type, out var subRecipe)
-					&& subRecipe.Item2.TryGetProperty("ingredients", out var subIngredientsEl)
+				if (GameData.exportRecipes.TryGetValue(type, out var subRecipe) && subRecipe.Item2.TryGetProperty("ingredients", out var subIngredientsEl)
 					&& subIngredientsEl.ValueKind == JsonValueKind.Array) {
 					bool canCraft = subIngredientsEl.EnumerateArray().All(sub =>
 						sub.TryGetProperty("ItemType", out var st) && st.GetString() is string subType
@@ -211,8 +214,6 @@ public partial class MainWindow : Window
 
 			if (item.Ingredients.Count > 0 && item.Ingredients.All(i => i.OwnedCount >= i.Count)) item.BorderColor = "#4A9EFF";
 		}
-
-		RefreshItemsList();
 	}
 
 	private static long XpToMaster(string type)
@@ -232,20 +233,40 @@ public partial class MainWindow : Window
 		return baseXp * (long)levelCap * (long)levelCap;
 	}
 
-	private static string? TryReadAccountIdFromEeLog(string eeLogPath)
+	private static string? ReadAccountName(string eeLogPath)
 	{
 		if (!File.Exists(eeLogPath)) return null;
-		try {
-			using var fs = new FileStream(eeLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-			using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-			string? line;
-			while ((line = reader.ReadLine()) is not null) {
-				var idx = line.IndexOf("AccountId: ", StringComparison.Ordinal);
-				if (idx < 0) continue;
-				return line[(idx + "AccountId: ".Length)..].Trim();
+
+		const string marker = "Logged in ";
+		const int maxAttempts = 10;
+		for (int attempt = 0; attempt < maxAttempts; attempt++) {
+			try {
+				using var fs = new FileStream( eeLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 64 * 1024, options: FileOptions.SequentialScan);
+				using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+				string? lastName = null;
+				string? line;
+				while ((line = reader.ReadLine()) is not null) {
+					var idx = line.IndexOf(marker, StringComparison.Ordinal);
+					if (idx < 0) continue;
+
+					var payload = line[(idx + marker.Length)..].Trim(); // "playername (accountid)"
+					var open = payload.LastIndexOf('(');
+					if (open <= 0) continue;
+
+					var name = payload[..open].Trim();
+					if (name.Length == 0) continue;
+
+					lastName = name.TrimEnd('-', ':').Trim();
+				}
+
+				return lastName;
+			} catch (IOException) {
+				Thread.Sleep(50);
+			} catch (UnauthorizedAccessException) {
+				Thread.Sleep(50);
 			}
-		} catch (IOException) {
 		}
+
 		return null;
 	}
 
@@ -332,14 +353,14 @@ public partial class MainWindow : Window
 			await SaveNotifiedFissures();
 		}
 
-		if (matches.Count == 0) return;
+		if (!appSettings.EnableNotifications || matches.Count == 0) return;
 
 		var title = matches.Count == 1 ? "Fissure found" : $"{matches.Count} Fissures found";
 		var body = matches.Count == 1
 			? $"{(matches[0].IsHard ? "Steel Path" : "Normal")} {matches[0].MissionType} {matches[0].Tier} ends in {matches[0].TimeRemaining}"
 			: string.Join(Environment.NewLine, matches.Select(f => $"{(f.IsHard ? "Steel Path" : "Normal")} {f.MissionType} {f.Tier} ends in {f.TimeRemaining}"));
 
-		_ = ToastWindow.ShowToastAsync(this, title, body, TimeSpan.FromSeconds(10));
+		_ = ToastWindow.ShowToastAsync(this, title, body, TimeSpan.FromSeconds(15));
 	}
 
 	private async Task LoadNotifiedFissures()
@@ -367,6 +388,80 @@ public partial class MainWindow : Window
 		} catch {
 			MessageBox.Show(this, "Error", "Failed to save seen fissures list.");
 		}
+	}
+
+	private void StartEeLogTail()
+	{
+		if (EElogTail is not null) return;
+		EElogTail = new CancellationTokenSource();
+		_ = TailFissureReward(EElog, EElogTail.Token);
+	}
+
+	private void StopEeLogTail()
+	{
+		try {
+			EElogTail?.Cancel();
+			EElogTail?.Dispose();
+		} catch { }
+		EElogTail = null;
+	}
+
+	private async Task TailFissureReward(string eeLogPath, CancellationToken token)
+	{
+		const string trigger = "VoidProjections: OpenVoidProjectionRewardScreenRMI";
+		long lastLength = -1;
+		DateTime lastToastUtc = DateTime.MinValue;
+		while (!token.IsCancellationRequested) {
+			try {
+				if (!IsWarframeRunning()) {
+					lastLength = -1; // reset so we re-seek correctly next time the game starts
+					await Task.Delay(1000, token);
+					continue;
+				}
+
+				if (!File.Exists(eeLogPath)) {
+					await Task.Delay(500, token);
+					continue;
+				}
+
+				using var fs = new FileStream(eeLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 64 * 1024, options: FileOptions.SequentialScan);
+				lastLength = fs.Length;
+				fs.Seek(lastLength, SeekOrigin.Begin);
+				using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+				while (!token.IsCancellationRequested) {
+					var posBefore = fs.Position;
+
+					var line = await reader.ReadLineAsync(token);
+					if (line is not null) {
+						if (line.Contains(trigger, StringComparison.Ordinal)) {
+							var now = DateTime.UtcNow;
+							if (now - lastToastUtc >= TimeSpan.FromSeconds(10)) {
+								lastToastUtc = now;
+								await Dispatcher.UIThread.InvokeAsync(() => ToastWindow.ShowToastAsync(this, "Warframe", "Void reward screen opened", TimeSpan.FromSeconds(8)));
+							}
+						}
+						continue;
+					}
+
+					var lenNow = fs.Length;
+					if (lenNow < lastLength || (lenNow == lastLength && fs.Position < posBefore)) {
+						break;
+					}
+
+					lastLength = lenNow;
+					await Task.Delay(150, token);
+				}
+			} catch (OperationCanceledException) {
+				return;
+			} catch {
+				await Task.Delay(250, token);
+			}
+		}
+	}
+
+	private static bool IsWarframeRunning()
+	{
+		return Process.GetProcessesByName("Warframe.x64.exe").Length > 0;
 	}
 
 	private void OnItemsClick(object? sender, RoutedEventArgs e)
@@ -454,6 +549,16 @@ public partial class MainWindow : Window
 			await RefreshFissuresList();
 		} catch (Exception ex) {
 			MessageBox.Show(this, "Error", "Failed to open Fissures Alert Settings: " + ex.Message);
+		}
+	}
+
+	private async void OnOpenSettingsClick(object? sender, RoutedEventArgs e)
+	{
+		try {
+			var w = new SettingsWindow();
+			await w.ShowDialog(this);
+		} catch (Exception ex) {
+			MessageBox.Show(this, "Error", "Failed to open Settings: " + ex.Message);
 		}
 	}
 }

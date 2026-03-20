@@ -1,0 +1,36 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="framenion.SettingsWindow"
+        Title="Settings"
+        SizeToContent="WidthAndHeight"
+        Background="{DynamicResource AppBackgroundBrush}">
+  <Border Padding="12">
+    <StackPanel>
+      <TextBlock Text="Appearance" FontSize="18" Foreground="White" />
+      <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto, Auto" RowSpacing="10" ColumnSpacing="10">
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="App background" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+        <TextBox Grid.Row="0" Grid.Column="1" Name="AppBackgroundBox" Watermark="#FFFFFF"/>
+
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="Panel background" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+        <TextBox Grid.Row="1" Grid.Column="1" Name="PanelBackgroundBox" Watermark="#FFFFFF"/>
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="Button background" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+        <TextBox Grid.Row="2" Grid.Column="1" Name="ButtonBackgroundBox" Watermark="#FFFFFF"/>
+
+        <TextBlock Grid.Row="3" Grid.Column="0" Text="Button foreground" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+        <TextBox Grid.Row="3" Grid.Column="1" Name="ButtonForegroundBox" Watermark="#FFFFFF"/>
+
+        <TextBlock Grid.Row="4" Grid.Column="0" Text="Button selected" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+        <TextBox Grid.Row="4" Grid.Column="1" Name="ButtonSelected" Watermark="#FFFFFF"/>
+      </Grid>
+
+      <TextBlock Text="Notifications" FontSize="18" Foreground="White" Margin="0,10,0,0"/>
+      <CheckBox Name="EnableNotificationsCheckBox" Content="Enable notifications" Foreground="#D0D0D0"/>
+
+      <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" Margin="0,10,0,0">
+        <Button Name="CancelButton" Content="Cancel" Click="Cancel_Click"/>
+        <Button Name="SaveButton" Content="Save and Apply" Click="SaveApply_Click"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

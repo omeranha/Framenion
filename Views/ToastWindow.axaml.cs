@@ -55,6 +55,7 @@ public partial class ToastWindow : Window
 		defaultMargin = margin;
 		defaultSpacing = spacing;
 
+		var toastOwner = NormalizeToastOwner(owner, anchor);
 		var toast = new ToastWindow { Topmost = true };
 		toast.TitleText.Text = title;
 		toast.BodyText.Text = body;
@@ -74,7 +75,7 @@ public partial class ToastWindow : Window
 		};
 
 		toast.Show(owner);
-		return AutoCloseAsync(owner, toast, duration.Value);
+		return AutoCloseAsync(toastOwner, toast, duration.Value);
 	}
 
 	private static async Task AutoCloseAsync(Window owner, ToastWindow toast, TimeSpan duration)
@@ -168,5 +169,26 @@ public partial class ToastWindow : Window
 			int y = stackDown ? area.Y + margin + i * (toastH + spacing) : area.Y + area.Height - margin - toastH - i * (toastH + spacing);
 			toast.Position = new PixelPoint(x, y);
 		}
+	}
+
+	private static Window NormalizeToastOwner(Window owner, ToastAnchor anchor)
+	{
+		if (anchor is not (ToastAnchor.BottomRightOfOwnerWindow or ToastAnchor.TopRightOfOwnerWindow)) return owner;
+
+		Window? current = owner;
+		while (current is not null) {
+			if (current is MainWindow main) return main;
+
+			current = current.Owner as Window;
+		}
+
+		current = owner;
+		Window root = owner;
+		while (current?.Owner is Window parent) {
+			root = parent;
+			current = parent;
+		}
+
+		return root;
 	}
 }

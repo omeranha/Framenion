@@ -24,7 +24,7 @@ public static class GameData
 		["VoidT3"] = ("Neo", "#c9c3c4"),
 		["VoidT4"] = ("Axi", "#FFD700"),
 		["VoidT5"] = ("Requiem", "#e80c1e"),
-		["VoidT6"] = ("Omnia", "FFFFFF")
+		["VoidT6"] = ("Omnia", "#FFFFFF")
 	};
 	public static readonly string appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Framenion");
 	public static readonly string cacheDir = Path.Combine(appDataDir, "cache");
@@ -128,7 +128,7 @@ public static class GameData
 				await using var outStream = File.Create(exportCacheFile);
 				await inStream.CopyToAsync(outStream);
 			} catch {
-				MessageBox.Show(window, "Error", "Failed to download file: " + file);
+				throw new FileNotFoundException("Failed to retrieve file: " + file);
 			}
 		}
 
@@ -187,7 +187,7 @@ public static class GameData
 					}
 			}
 		} catch (Exception ex) {
-			MessageBox.Show(window, "Error", "Failed to load file: " + file + " — " + ex.Message);
+			throw new Exception("Failed to load file: " + file, ex);
 		}
 	}
 

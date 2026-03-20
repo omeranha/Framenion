@@ -6,17 +6,17 @@
         x:DataType="framenion:FissuresAlert"
         SizeToContent="WidthAndHeight"
         Title="Fissures Alert List"
-        Background="#2C2C2C">
+        Background="{DynamicResource PanelBackgroundBrush}">
+
   <StackPanel Margin="12" Orientation="Vertical" Spacing="8">
     <StackPanel Orientation="Horizontal" Spacing="8">
     </StackPanel>
 
-    <Grid RowDefinitions="*, Auto" Background="#1E1E1E">
+    <Grid RowDefinitions="*, Auto"
+          Background="{DynamicResource SurfaceBackgroundBrush}">
       <ListBox Grid.Row="0"
                Name="FiltersList"
-               Width="760"
-               Height="280"
-               Background="#1E1E1E"
+               Background="{DynamicResource SurfaceBackgroundBrush}"
                ItemsSource="{Binding Filters}"
                HorizontalAlignment="Stretch">
         <ListBox.ItemTemplate>
@@ -57,7 +57,6 @@
               <Button Grid.Column="4"
                       Content="❌"
                       Click="OnRemoveEntryClick"
-                      Background="#2C2C2C"
                       HorizontalAlignment="Right"
                       VerticalAlignment="Center"
                       HorizontalContentAlignment="Center"
@@ -67,35 +66,9 @@
         </ListBox.ItemTemplate>
       </ListBox>
 
-      <Button Grid.Row="1"
-              Name="AddButton"
-              Content="Add New"
-              Click="OnAddEntryClick"
-              Classes="filterButton"
-              HorizontalAlignment="Center"
-              Margin="0,0,0,10"/>
+      <Button Grid.Row="1" Name="AddButton" Content="Add New" Click="OnAddEntryClick" HorizontalAlignment="Center" Margin="0,0,0,10"/>
     </Grid>
 
-    <Button Name="SaveButton"
-            Content="Save"
-            Click="Save_Click"
-            HorizontalAlignment="Center"
-            Classes="filterButton"/>
+    <Button Name="SaveButton" Content="Save" Click="Save_Click" HorizontalAlignment="Center"/>
   </StackPanel>
-
-  <Window.Styles>
-    <Style Selector="Button.filterButton">
-      <Setter Property="Background" Value="#4A9EFF"/>
-      <Setter Property="Foreground" Value="white"/>
-      <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="BorderBrush" Value="#4A4A4A"/>
-      <Setter Property="CornerRadius" Value="4"/>
-      <Setter Property="FontSize" Value="13"/>
-      <Setter Property="Cursor" Value="Hand"/>
-    </Style>
-    <Style Selector="Button.filterButton:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="#CCCCCC"/>
-      <Setter Property="Foreground" Value="white"/>
-    </Style>
-  </Window.Styles>
 </Window>
