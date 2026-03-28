@@ -1,12 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using framenion.Src;
 using Sdcb.PaddleInference;
-using Sdcb.PaddleOCR;
 using Sdcb.PaddleOCR.Models;
 using Sdcb.PaddleOCR.Models.Online;
 using System;
@@ -22,7 +20,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using YamlDotNet.Core.Tokens;
 
 namespace framenion;
 
@@ -39,16 +36,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	private static readonly string inventoryFile = Path.Combine(GameData.appDataDir, "inventory.json");
 	private static readonly string notifiedFissuresFile = Path.Combine(GameData.appDataDir, "notified_fissures.txt");
 
-	private readonly HashSet<string> notifiedFissures = new HashSet<string>();
+	private readonly HashSet<string> notifiedFissures = [];
 
 	private IReadOnlyList<FissureAlertEntry> loadedFissureAlertList = [];
 
 	private CancellationTokenSource? searchDebounce;
-	private DispatcherTimer logPollTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
 	private long lastPosition = 0;
 	private bool lastWfRunning = false;
-
-	private AppSettings appSettings = new();
 
 	private double itemsZoom = 1.0;
 	private const double ItemsZoomMin = 0.50;
@@ -60,6 +54,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 	public new event PropertyChangedEventHandler? PropertyChanged;
 	private void OnPropertyChanged([CallerMemberName] string? propertyName = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+	private bool isLoading;
+	public bool IsLoading
+	{
+		get => isLoading;
+		set {
+			if (isLoading != value) {
+				isLoading = value;
+				OnPropertyChanged();
+			}
+		}
+	}
+
+	private readonly WindowsKeyboardHook keyboardHook = new();
 
 	public MainWindow()
 	{
@@ -71,19 +78,32 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 		InitializeComponent(true);
 		DataContext = this;
+		if (Design.IsDesignMode) {
+			return;
+		}
 		ItemsList.ItemsSource = displayedItems;
 		FissuresList.ItemsSource = displayedFissures;
 	}
 
+	protected override void OnClosed(EventArgs e)
+	{
+		base.OnClosed(e);
+		keyboardHook.Unhook();
+		GameData.fissureRefreshTimer?.Stop();
+		GameData.fissureUpdateTimer?.Stop();
+		GameData.logPollTimer?.Stop();
+		if (GameData.paddleEngine is IDisposable disposableEngine) {
+			disposableEngine.Dispose();
+		}
+		searchDebounce?.Cancel();
+		searchDebounce?.Dispose();
+	}
+
 	private async Task InitializeAsync()
 	{
+		IsLoading = true;
 		try {
-			FullOcrModel model = await OnlineFullModels.EnglishV3.DownloadAsync();
-			GameData.paddleEngine = new(model, PaddleDevice.Mkldnn()) {
-				AllowRotateDetection = false,
-				Enable180Classification = false,
-			};
-			appSettings = await AppSettings.LoadAsync();
+			GameData.appSettings = await AppSettings.LoadAsync();
 			await LoadNotifiedFissures();
 			loadedFissureAlertList = FissureAlertList.Load();
 
@@ -97,34 +117,55 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			GameData.fissureUpdateTimer.Start();
 			GameData.fissureRefreshTimer.Start();
 
-			logPollTimer.Tick += (_, _) => ReadNewLogData(EElog);
-			logPollTimer.Start();
-			_ = InitializeDataInBackgroundAsync();
+			GameData.logPollTimer.Tick += (_, _) => ReadNewLogData(EElog);
+			if (GameData.appSettings.EnableEELogRead) {
+				GameData.logPollTimer.Start();
+			}
+
+			if (GameData.appSettings.EnableRelicOverlay) {
+				FullOcrModel model = await OnlineFullModels.EnglishV3.DownloadAsync();
+				GameData.paddleEngine = new(model, PaddleDevice.Mkldnn()) {
+					AllowRotateDetection = false,
+					Enable180Classification = false,
+				};
+			}
+			await InitializeDataInBackgroundAsync();
 		} catch (Exception ex) {
 			MessageBox.Show(this, "Error", "Failed to initialize application: " + ex.Message);
+		} finally {
+			IsLoading = false;
+			keyboardHook.KeyEvent += key => {
+				if (key == Avalonia.Input.Key.PrintScreen) {
+					Dispatcher.UIThread.Post(ReadRelicWindow);
+				}
+			};
+			keyboardHook.Hook();
 		}
 	}
 
 	private async Task InitializeDataInBackgroundAsync()
 	{
-		string[] firstLoad = [ "dict.en", "ExportRegions", "ExportMissionTypes", "ExportFactions" ];
-		var loadTasks = firstLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir));
-		await Task.WhenAll(loadTasks);
-		await VoidFissure.LoadVoidFissures(this);
-		await RefreshFissuresList();
+		try {
+			string[] firstLoad = ["dict.en", "ExportRegions", "ExportMissionTypes", "ExportFactions"];
+			var loadTasks = firstLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir));
+			await Task.WhenAll(loadTasks);
+			await Dispatcher.UIThread.InvokeAsync(async () => {
+				await VoidFissure.LoadVoidFissures(this);
+				await RefreshFissuresList();
+			});
+			string[] secondLoad = ["ExportWarframes", "ExportRecipes", "ExportWeapons", "ExportResources", "ExportMisc", "ExportSentinels", "ExportTextIcons"];
+			loadTasks = secondLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir));
+			await Task.WhenAll(loadTasks);
+			await GameData.LoadWfMarketItems(this);
 
-		string[] secondLoad = [ "ExportWarframes", "ExportRecipes", "ExportWeapons", "ExportResources", "ExportMisc", "ExportSentinels", "ExportTextIcons" ];
-		loadTasks = secondLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir));
-		await Task.WhenAll(loadTasks);
-		await GameData.LoadWfMarketItems(this);
-
-		await Task.Run(async () => {
 			await GameData.LoadExports(this);
-		});
-		await Dispatcher.UIThread.InvokeAsync(async () => {
-			await ParseInfo();
-			RefreshItemsList();
-		});
+			await Dispatcher.UIThread.InvokeAsync(async () => {
+				await ParseInfo();
+				RefreshItemsList();
+			});
+		} catch (Exception e) {
+			MessageBox.Show(this, "Error", "Failed to initialize data in background: " + e.Message);
+		}
 	}
 
 	private async Task ParseInfo()
@@ -139,9 +180,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		if (root.ValueKind != JsonValueKind.Object) return;
 		GameData.mainRoot = root;
 
-		var loggedInName = ReadAccountName(EElog);
-		if (!string.IsNullOrWhiteSpace(loggedInName)) {
-			PlayerName.Text = loggedInName;
+		if (GameData.appSettings.EnableEELogRead) {
+			var loggedInName = ReadAccountName();
+			if (!string.IsNullOrWhiteSpace(loggedInName)) {
+				PlayerName.Text = loggedInName;
+			}
 		}
 
 		if (root.TryGetProperty("PremiumCredits", out var platinum) && platinum.TryGetInt64(out var p)) {
@@ -260,41 +303,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		return baseXp * (long)levelCap * (long)levelCap;
 	}
 
-	private static string? ReadAccountName(string eeLogPath)
+	private string ReadAccountName()
 	{
-		if (!File.Exists(eeLogPath)) return null;
+		if (!File.Exists(EElog)) return "";
 
 		const string marker = "Logged in ";
-		const int maxAttempts = 10;
-		for (int attempt = 0; attempt < maxAttempts; attempt++) {
-			try {
-				using var fs = new FileStream( eeLogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 64 * 1024, options: FileOptions.SequentialScan);
-				using var reader = new StreamReader(fs, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-				string? lastName = null;
-				string? line;
-				while ((line = reader.ReadLine()) is not null) {
-					var idx = line.IndexOf(marker, StringComparison.Ordinal);
-					if (idx < 0) continue;
+		try {
+			var fileInfo = new FileInfo(EElog);
+			long fileLength = fileInfo.Length;
+			using var fs = new FileStream(EElog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+			using var mmf = MemoryMappedFile.CreateFromFile(fs, null, 0, MemoryMappedFileAccess.Read, HandleInheritability.None, false);
+			using var stream = mmf.CreateViewStream(0, fileLength, MemoryMappedFileAccess.Read);
+			using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
 
-					var payload = line[(idx + marker.Length)..].Trim(); // "playername (accountid)"
+			string? line;
+			while ((line = reader.ReadLine()) != null) {
+				int idx = line.IndexOf(marker, StringComparison.Ordinal);
+				if (idx >= 0) {
+					var payload = line[(idx + marker.Length)..].Trim();
 					var open = payload.LastIndexOf('(');
-					if (open <= 0) continue;
-
-					var name = payload[..open].Trim();
-					if (name.Length == 0) continue;
-
-					lastName = name.TrimEnd('-', ':').Trim();
+					if (open > 0) {
+						var name = payload[..open].Trim();
+						if (name.Length > 0) return name.TrimEnd('-', ':').Trim();
+					}
 				}
-
-				return lastName;
-			} catch (IOException) {
-				Thread.Sleep(50);
-			} catch (UnauthorizedAccessException) {
-				Thread.Sleep(50);
 			}
+		} catch {
+			MessageBox.Show(this, "Error", "Failed to read account name from EE.log.");
 		}
 
-		return null;
+		return "";
 	}
 
 	private void UpdateFissureTimers()
@@ -380,14 +418,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			await SaveNotifiedFissures();
 		}
 
-		if (!appSettings.EnableNotifications || matches.Count == 0) return;
+		if (!GameData.appSettings.EnableNotifications || matches.Count == 0) return;
 
 		var title = matches.Count == 1 ? "Fissure found" : $"{matches.Count} Fissures found";
 		var body = matches.Count == 1
 			? $"{(matches[0].IsHard ? "Steel Path" : "Normal")} {matches[0].MissionType} {matches[0].Tier} ends in {matches[0].TimeRemaining}"
 			: string.Join(Environment.NewLine, matches.Select(f => $"{(f.IsHard ? "Steel Path" : "Normal")} {f.MissionType} {f.Tier} ends in {f.TimeRemaining}"));
 
-		_ = ToastWindow.ShowToastAsync(this, title, body, TimeSpan.FromSeconds(10));
+		ToastWindow.ShowToast(this, title, body, TimeSpan.FromSeconds(10));
 	}
 
 	private async Task LoadNotifiedFissures()
@@ -415,6 +453,57 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		} catch {
 			MessageBox.Show(this, "Error", "Failed to save seen fissures list.");
 		}
+	}
+
+	private void ReadRelicWindow()
+	{
+		_ = Task.Run(async () => {
+			try {
+				await Task.Delay(2000);
+				var screenshot = ScreenCapture.Capture();
+				var rewards = RelicRewardOCR.ReadRewards(screenshot, GameData.paddleEngine);
+				if (rewards.Count == 0) {
+					ToastWindow.ShowToast(this, "No rewards detected", "Could not detect any relic rewards.", TimeSpan.FromSeconds(5));
+					return;
+				}
+				var rewardInfoTasks = rewards.Select(r => GetItemData(r.ItemName)).ToArray();
+				var rewardInfos = await Task.WhenAll(rewardInfoTasks);
+
+				var displayTasks = rewards.Zip(rewardInfos, (reward, info) =>
+				RelicRewardWindow.Display(this, info, reward.Rect.X, reward.Rect.Y + 200, reward.Rect.Width, TimeSpan.FromSeconds(10))
+				);
+				await Task.WhenAll(displayTasks);
+			} catch (Exception ex) {
+				ToastWindow.ShowToast(this, "Error", "Failed to read rewards: " + ex.Message, TimeSpan.FromSeconds(5));
+			}
+		});
+	}
+
+	private async Task<RewardInfo> GetItemData(string itemName)
+	{
+		GameData.warframeMarketItems.TryGetValue(itemName, out var marketInfo);
+		var rewardInfo = new RewardInfo(itemName);
+		try {
+			if (!string.IsNullOrEmpty(marketInfo.Item1)) {
+				rewardInfo.Ducats = marketInfo.Item2;
+				var resp = await GameData.httpClient.GetAsync($"https://api.warframe.market/v2/orders/item/{marketInfo.Item1}/top");
+				resp.EnsureSuccessStatusCode();
+				using var stream = await resp.Content.ReadAsStreamAsync();
+				using var doc = await JsonDocument.ParseAsync(stream);
+
+				if (doc.RootElement.TryGetProperty("data", out var data) && data.TryGetProperty("sell", out var sell) &&
+					sell.ValueKind == JsonValueKind.Array && sell.GetArrayLength() > 0) {
+					var first = sell[0];
+					if (first.TryGetProperty("platinum", out var platinumProp)) {
+						rewardInfo.Platinum = platinumProp.GetInt32().ToString();
+					}
+				}
+			}
+		} catch {
+			MessageBox.Show(this, "Error", "Failed to fetch market data for " + itemName);
+		}
+
+		return rewardInfo;
 	}
 
 	private void ReadNewLogData(string logPath)
@@ -460,24 +549,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			while ((line = reader.ReadLine()) != null) {
 				if (!line.Contains("Relic rewards initialized")) continue;
 
-				_ = Task.Run(async () => {
-					try {
-						await Task.Delay(500);
-						var screenshot = ScreenCapture.Capture();
-						var rewards = RelicRewardOCR.ReadRewards(screenshot, GameData.paddleEngine);
-
-						await Dispatcher.UIThread.InvokeAsync(async () => {
-							var tasks = rewards.Select(r =>
-								RelicRewardWindow.Display(this, r.ItemName, r.Rect.X, r.Rect.Y + 300, TimeSpan.FromSeconds(10))
-							);
-							await Task.WhenAll(tasks);
-						});
-					} catch (Exception ex) {
-						await Dispatcher.UIThread.InvokeAsync(() =>
-							MessageBox.Show(this, "Error", "Failed to read rewards: " + ex.Message)
-						);
-					}
-				});
+				ReadRelicWindow();
 			}
 			lastPosition = fileLength;
 		}

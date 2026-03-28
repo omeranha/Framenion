@@ -22,16 +22,17 @@ public partial class FissuresAlert : Window
 	{
 		InitializeComponent();
 		this.DataContext = this;
+		this.WindowStartupLocation = WindowStartupLocation.CenterOwner;
 		var culture = new CultureInfo("en-US", false).TextInfo;
 		var missionNames = GameData.exportMissionTypes.Values.Select(el => {
 			try {
-				var nameKey = el.GetProperty("name").ToString();
+				string nameKey = el.TryGetProperty("name", out var nameProp) ? nameProp.ToString() : string.Empty;
 				return GameData.lang.TryGetValue(nameKey, out var v) ? culture.ToTitleCase(v.ToLower()) : nameKey;
 			} catch { return string.Empty; }
 		}).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList();
 		var planetNames = GameData.exportRegions.Values.Select(el => {
 			try {
-				var systemName = el.GetProperty("systemName").ToString();
+				var systemName = el.TryGetProperty("systemName", out var sysProp) ? sysProp.ToString() : string.Empty;
 				return GameData.lang.TryGetValue(systemName, out var v) ? v : systemName;
 			} catch { return string.Empty; }
 		}).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).OrderBy(s => s).ToList();
@@ -91,7 +92,7 @@ public partial class FissuresAlert : Window
 			}
 			writer.WriteEndArray();
 			writer.Flush();
-			_ = ToastWindow.ShowToastAsync(this, "Fissure Alert List", "Saved", TimeSpan.FromSeconds(5), ToastAnchor.TopRightOfOwnerWindow);
+			ToastWindow.ShowToast(this, "Fissure Alert List", "Saved", TimeSpan.FromSeconds(5), ToastAnchor.TopRightOfOwnerWindow);
 		} catch (Exception ex) {
 			MessageBox.Show(this, "Error", "Failed to save filters: " + ex.Message);
 		}

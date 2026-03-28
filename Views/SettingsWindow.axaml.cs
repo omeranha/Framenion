@@ -13,6 +13,7 @@ public partial class SettingsWindow : Window
 	public SettingsWindow()
 	{
 		InitializeComponent();
+		this.WindowStartupLocation = WindowStartupLocation.CenterOwner;
 		Opened += async (_, _) => await LoadAsync();
 	}
 
@@ -25,6 +26,10 @@ public partial class SettingsWindow : Window
 		ButtonForegroundBox.Text = settings.ButtonForeground;
 		ButtonSelected.Text = settings.ButtonSelected;
 		EnableNotificationsCheckBox.IsChecked = settings.EnableNotifications;
+		EnableEELogReadBox.IsChecked = settings.EnableEELogRead;
+		EnableRelicOverlayBox.IsChecked = settings.EnableRelicOverlay;
+		UiScaleNumeric.Value = settings.UIScale;
+		DebugOCRBox.IsChecked = settings.DebugOCR;
 	}
 
 	private async void SaveApply_Click(object? sender, RoutedEventArgs e)
@@ -33,14 +38,24 @@ public partial class SettingsWindow : Window
 		settings.PanelBackground = PanelBackgroundBox.Text?.Trim() ?? settings.PanelBackground;
 		settings.ButtonBackground = ButtonBackgroundBox.Text?.Trim() ?? settings.ButtonBackground;
 		settings.ButtonForeground = ButtonForegroundBox.Text?.Trim() ?? settings.ButtonForeground;
+		settings.ButtonSelected = ButtonSelected.Text?.Trim() ?? settings.ButtonSelected;
 		settings.EnableNotifications = EnableNotificationsCheckBox.IsChecked ?? true;
+		settings.EnableEELogRead = EnableEELogReadBox.IsChecked ?? true;
+		settings.EnableRelicOverlay = EnableRelicOverlayBox.IsChecked ?? true;
+		settings.UIScale = (int)(UiScaleNumeric.Value ?? settings.UIScale);
+		settings.DebugOCR = DebugOCRBox.IsChecked ?? false;
 		settings.ApplyToApplicationResources();
 
 		try {
 			await settings.SaveAsync();
-			_ = ToastWindow.ShowToastAsync(this, "Settings", "Settings saved successfully.", TimeSpan.FromSeconds(3), ToastAnchor.TopRightOfOwnerWindow);
+			if (settings.EnableEELogRead) {
+				GameData.logPollTimer.Start();
+			} else {
+				GameData.logPollTimer.Stop();
+			}
+			ToastWindow.ShowToast(this, "Settings", "Settings saved successfully.", TimeSpan.FromSeconds(3), ToastAnchor.TopRightOfOwnerWindow);
 		} catch (Exception ex) {
-			_ = ToastWindow.ShowToastAsync(this, "Error", $"Failed to save settings: {ex.Message}", TimeSpan.FromSeconds(3), ToastAnchor.TopRightOfOwnerWindow);
+			MessageBox.Show(this, "Error", $"Failed to save settings: {ex.Message}");
 		}
 	}
 

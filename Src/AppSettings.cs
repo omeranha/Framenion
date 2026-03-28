@@ -15,6 +15,10 @@ public sealed class AppSettings
 	public string ButtonForeground { get; set; } = "#FFFFFF";
 	public string ButtonSelected { get; set; } = "#4A9EFF";
 	public bool EnableNotifications { get; set; } = true;
+	public bool EnableEELogRead { get; set;  } = true;
+	public bool EnableRelicOverlay { get; set; } = true;
+	public int UIScale { get; set; } = 100;
+	public bool DebugOCR { get; set; } = false;
 
 	public static string SettingsPath => Path.Combine(GameData.appDataDir, "settings.json");
 
@@ -37,6 +41,10 @@ public sealed class AppSettings
 			settings.ButtonForeground = ReadString(root, "buttonForeground", settings.ButtonForeground);
 			settings.ButtonSelected = ReadString(root, "buttonSelected", settings.ButtonSelected);
 			settings.EnableNotifications = ReadBool(root, "enableNotifications", settings.EnableNotifications);
+			settings.EnableEELogRead = ReadBool(root, "enableEELogRead", settings.EnableEELogRead);
+			settings.EnableRelicOverlay = ReadBool(root, "enableRelicOverlay", settings.EnableRelicOverlay);
+			settings.UIScale = ReadInt(root, "uiScale", settings.UIScale);
+			settings.DebugOCR = ReadBool(root, "debugOCR", settings.DebugOCR);
 			return settings;
 		} catch {
 			return settings;
@@ -58,6 +66,10 @@ public sealed class AppSettings
 		writer.WriteString("buttonForeground", ButtonForeground ?? string.Empty);
 		writer.WriteString("buttonSelected", ButtonSelected ?? string.Empty);
 		writer.WriteBoolean("enableNotifications", EnableNotifications);
+		writer.WriteBoolean("enableEELogRead", EnableEELogRead);
+		writer.WriteBoolean("enableRelicOverlay", EnableRelicOverlay);
+		writer.WriteNumber("uiScale", UIScale);
+		writer.WriteBoolean("debugOCR", DebugOCR);
 		writer.WriteEndObject();
 
 		await writer.FlushAsync().ConfigureAwait(false);
@@ -97,4 +109,6 @@ public sealed class AppSettings
 	private static string ReadString(JsonElement root, string propertyName, string fallback) => root.TryGetProperty(propertyName, out var p) && p.ValueKind == JsonValueKind.String ? (p.GetString() ?? fallback) : fallback;
 
 	private static bool ReadBool(JsonElement root, string propertyName, bool fallback) => root.TryGetProperty(propertyName, out var p) && p.ValueKind == JsonValueKind.True || ((!root.TryGetProperty(propertyName, out p) || p.ValueKind != JsonValueKind.False) && fallback);
+
+	private static int ReadInt(JsonElement root, string propertyName, int fallback) => root.TryGetProperty(propertyName, out var p) && p.ValueKind == JsonValueKind.Number && p.TryGetInt32(out var value) ? value : fallback;
 }

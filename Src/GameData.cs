@@ -18,6 +18,13 @@ using System.Threading.Tasks;
 
 namespace framenion.Src;
 
+public class RewardInfo(string name)
+{
+	public string ItemName { get; set; } = name;
+	public string Platinum { get; set; } = "0";
+	public string Ducats { get; set; } = "0";
+}
+
 public static class GameData
 {
 	public static readonly IReadOnlyDictionary<string, (string, string)> relicType = new Dictionary<string, (string, string)>(StringComparer.Ordinal) {
@@ -57,6 +64,9 @@ public static class GameData
 
 	public static DispatcherTimer? fissureRefreshTimer;
 	public static DispatcherTimer? fissureUpdateTimer;
+	public static DispatcherTimer logPollTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
+
+	public static AppSettings appSettings = new();
 
 	public static async Task<FrozenDictionary<string, JsonElement>> ParseDictionary(string path)
 	{
@@ -110,12 +120,11 @@ public static class GameData
 	{
 		var failures = new ConcurrentBag<string>();
 		await Task.WhenAll(icons.Where(i => !string.IsNullOrEmpty(i)).Select(async icon => {
-			try { await DownloadIconAsync(icon); } catch { failures.Add(icon); }
+			try {
+				await DownloadIconAsync(icon);
+			} catch {
+			}
 		}));
-
-		if (!failures.IsEmpty) {
-			MessageBox.Show(window, "Error", $"Failed to download {failures.Count} icon(s).");
-		}
 	}
 
 	public static async Task LoadWfMarketItems(Window window)

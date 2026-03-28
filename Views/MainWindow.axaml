@@ -13,7 +13,7 @@
     <Grid RowDefinitions="Auto,*">
         <!-- Top Bar -->
         <Border Grid.Row="0" Background="{DynamicResource PanelBackgroundBrush}" Padding="10">
-            <Grid ColumnDefinitions="Auto,*,Auto">
+            <Grid ColumnDefinitions="Auto, *, Auto, Auto, Auto">
                 <!-- Menu Buttons -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
                     <Button Name="ItemsButton" Content="Equipment" Classes="selected" Click="OnItemsClick" Padding="20,10"/>
@@ -21,8 +21,10 @@
                 </StackPanel>
 
                 <!-- Player Info Panel -->
-                <Image Grid.Column="1" Name="WarframeOpened" HorizontalAlignment="Right" Width="32" Height="32" VerticalAlignment="Center" ToolTip.Tip="Warframe is closed" Source="avares://framenion/assets/uncheck_d.png" Margin="0, 0, 10, 0"/>
-                <Border Grid.Column="2" Background="{DynamicResource SurfaceBackgroundBrush}" CornerRadius="5" Padding="15,5">
+                <ProgressBar Grid.Column="2" MinWidth="100" Name="LoadingBar" IsIndeterminate="true" IsVisible="{Binding #RootWindow.IsLoading}" ToolTip.Tip="Initializing..."
+             Height="10" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="Green" Margin="0, 0, 10, 0"/>
+                <Image Grid.Column="3" Name="WarframeOpened" HorizontalAlignment="Right" Width="32" Height="32" VerticalAlignment="Center" ToolTip.Tip="Warframe is closed" Source="avares://framenion/assets/uncheck_d.png" Margin="0, 0, 10, 0"/>
+                <Border Grid.Column="4" Background="{DynamicResource SurfaceBackgroundBrush}" CornerRadius="5" Padding="15,5" HorizontalAlignment="Right">
                     <StackPanel Orientation="Horizontal" Spacing="15">
                         <StackPanel Orientation="Horizontal" Spacing="5">
                             <Button Name="RefreshInfoButton" Content="↻" Click="OnRefreshInfoClickAsync" Classes="iconButton" ToolTip.Tip="Refresh Inventory Info"/>

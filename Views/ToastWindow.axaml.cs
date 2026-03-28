@@ -47,7 +47,7 @@ public partial class ToastWindow : Window
 		Closed += (_, _) => OnToastClosed(this);
 	}
 
-	public static Task ShowToastAsync(Window owner, string title, string body, TimeSpan? duration = null, ToastAnchor anchor = ToastAnchor.BottomRightOfScreen,
+	public static void ShowToast(Window owner, string title, string body, TimeSpan? duration = null, ToastAnchor anchor = ToastAnchor.BottomRightOfScreen,
 		int margin = 12,
 		int spacing = 10)
 	{
@@ -75,15 +75,13 @@ public partial class ToastWindow : Window
 		};
 
 		toast.Show(toastOwner);
-		return AutoCloseAsync(toastOwner, toast, duration.Value);
+		_ = AutoCloseAsync(toastOwner, toast, duration.Value);
 	}
 
 	private static async Task AutoCloseAsync(Window owner, ToastWindow toast, TimeSpan duration)
 	{
 		await Task.Delay(duration);
-
-		if (!toast.IsVisible)
-			return;
+		if (!toast.IsVisible) return;
 
 		await toast.DismissAsync(reposition: true);
 	}

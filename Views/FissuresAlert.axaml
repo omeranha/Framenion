@@ -4,7 +4,9 @@
         xmlns:src="clr-namespace:framenion.Src"
         xmlns:framenion="clr-namespace:framenion"
         x:DataType="framenion:FissuresAlert"
-        SizeToContent="WidthAndHeight"
+        MinWidth="150"
+        MaxWidth="750"
+        SizeToContent="Height"
         Title="Fissures Alert List"
         Background="{DynamicResource PanelBackgroundBrush}">
 
@@ -12,13 +14,12 @@
     <StackPanel Orientation="Horizontal" Spacing="8">
     </StackPanel>
 
-    <Grid RowDefinitions="*, Auto"
-          Background="{DynamicResource SurfaceBackgroundBrush}">
+    <Grid RowDefinitions="Auto, Auto"
+          Background="{DynamicResource SurfaceBackgroundBrush}" RowSpacing="5">
       <ListBox Grid.Row="0"
                Name="FiltersList"
                Background="{DynamicResource SurfaceBackgroundBrush}"
-               ItemsSource="{Binding Filters}"
-               HorizontalAlignment="Stretch">
+               ItemsSource="{Binding Filters}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="src:FissureAlertEntry">
             <Grid Margin="4"

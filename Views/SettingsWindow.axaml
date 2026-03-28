@@ -4,32 +4,64 @@
         Title="Settings"
         SizeToContent="WidthAndHeight"
         Background="{DynamicResource AppBackgroundBrush}">
-  <Border Padding="12">
-    <StackPanel>
-      <TextBlock Text="Appearance" FontSize="18" Foreground="White" />
-      <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto, Auto" RowSpacing="10" ColumnSpacing="10">
-        <TextBlock Grid.Row="0" Grid.Column="0" Text="App background" Foreground="#D0D0D0" VerticalAlignment="Center"/>
-        <TextBox Grid.Row="0" Grid.Column="1" Name="AppBackgroundBox" Watermark="#FFFFFF"/>
+  <Border Padding="20">
+    <StackPanel Spacing="16">
+        <Grid ColumnDefinitions="Auto, Auto" ColumnSpacing="5">
+      <TextBlock Grid.Column="0" Text="Settings" FontSize="22" FontWeight="Bold" Foreground="White" Margin="0,0,0,8" VerticalAlignment="Center"/>
+      <TextBlock Grid.Column="1" Text="Mouse over options for more info." FontSize="13" Foreground="#B0B0B0" Margin="0,0,0,12" VerticalAlignment="Bottom"/>
+            </Grid>
+      <!-- Appearance Section -->
+      <Border Background="#22FFFFFF" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+        <StackPanel>
+          <TextBlock Text="Appearance" FontSize="16" FontWeight="Bold" Foreground="White" Margin="0,0,0,8"/>
+          <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="10">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="App background" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+            <TextBox Grid.Row="0" Grid.Column="1" Name="AppBackgroundBox" Watermark="#1A1A1A" ToolTip.Tip="Main background color (e.g. #1A1A1A)"/>
 
-        <TextBlock Grid.Row="1" Grid.Column="0" Text="Panel background" Foreground="#D0D0D0" VerticalAlignment="Center"/>
-        <TextBox Grid.Row="1" Grid.Column="1" Name="PanelBackgroundBox" Watermark="#FFFFFF"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Panel background" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+            <TextBox Grid.Row="1" Grid.Column="1" Name="PanelBackgroundBox" Watermark="#2C2C2C" ToolTip.Tip="Panel background color (e.g. #2C2C2C)"/>
 
-        <TextBlock Grid.Row="2" Grid.Column="0" Text="Button background" Foreground="#D0D0D0" VerticalAlignment="Center"/>
-        <TextBox Grid.Row="2" Grid.Column="1" Name="ButtonBackgroundBox" Watermark="#FFFFFF"/>
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Button background" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+            <TextBox Grid.Row="2" Grid.Column="1" Name="ButtonBackgroundBox" Watermark="#2C2C2C" ToolTip.Tip="Button background color (e.g. #2C2C2C)"/>
 
-        <TextBlock Grid.Row="3" Grid.Column="0" Text="Button foreground" Foreground="#D0D0D0" VerticalAlignment="Center"/>
-        <TextBox Grid.Row="3" Grid.Column="1" Name="ButtonForegroundBox" Watermark="#FFFFFF"/>
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Button foreground" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+            <TextBox Grid.Row="3" Grid.Column="1" Name="ButtonForegroundBox" Watermark="#888888" ToolTip.Tip="Button text color (e.g. #888888)"/>
 
-        <TextBlock Grid.Row="4" Grid.Column="0" Text="Button selected" Foreground="#D0D0D0" VerticalAlignment="Center"/>
-        <TextBox Grid.Row="4" Grid.Column="1" Name="ButtonSelected" Watermark="#FFFFFF"/>
-      </Grid>
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="Button selected" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+            <TextBox Grid.Row="4" Grid.Column="1" Name="ButtonSelected" Watermark="#4A9EFF" ToolTip.Tip="Button selected color (e.g. #4A9EFF)"/>
+          </Grid>
+        </StackPanel>
+      </Border>
 
-      <TextBlock Text="Notifications" FontSize="18" Foreground="White" Margin="0,10,0,0"/>
-      <CheckBox Name="EnableNotificationsCheckBox" Content="Enable notifications" Foreground="#D0D0D0"/>
+      <!-- Miscellaneous Section -->
+      <Border Background="#22FFFFFF" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+        <StackPanel>
+          <TextBlock Text="Miscellaneous" FontSize="16" FontWeight="Bold" Foreground="White" Margin="0,0,0,8"/>
+          <StackPanel Spacing="8">
+            <CheckBox Name="EnableNotificationsCheckBox"
+                      Content="Enable notifications"
+                      Foreground="#D0D0D0"
+                      ToolTip.Tip="Enable or disable Toast notifications"/>
+            <CheckBox Name="EnableEELogReadBox"
+                      Content="Enable EE log reading"
+                      Foreground="#D0D0D0"
+                      ToolTip.Tip="Enable real-time EE log reading"/>
+            <CheckBox Name="EnableRelicOverlayBox"
+                      Content="Enable relic reward overlay"
+                      Foreground="#D0D0D0"
+                      ToolTip.Tip="Enable OCR for relic rewards"/>
+            <Grid ColumnDefinitions="Auto, Auto" ColumnSpacing="10" ToolTip.Tip="Insert Warframe UI scale value">
+                <TextBlock Grid.Column="0" Text="UI scale (%)" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+                <NumericUpDown Grid.Column="1" Name="UiScaleNumeric" Minimum="50" Maximum="100" ShowButtonSpinner="False"/>
+            </Grid>
+            <CheckBox Name="DebugOCRBox" Content="Enable OCR debug images" Foreground="#D0D0D0" ToolTip.Tip="Save debug images for relic reward OCR (for troubleshooting)"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
 
       <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" Margin="0,10,0,0">
         <Button Name="CancelButton" Content="Cancel" Click="Cancel_Click"/>
-        <Button Name="SaveButton" Content="Save and Apply" Click="SaveApply_Click"/>
+        <Button Name="SaveButton" Content="Save" Click="SaveApply_Click"/>
       </StackPanel>
     </StackPanel>
   </Border>
