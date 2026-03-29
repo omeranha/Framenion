@@ -5,6 +5,7 @@
         x:DataType="local:MessageBox"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner"
+        MinWidth="200"
         Background="{DynamicResource SurfaceBackgroundBrush}">
 
     <Grid Background="{DynamicResource AppBackgroundBrush}">

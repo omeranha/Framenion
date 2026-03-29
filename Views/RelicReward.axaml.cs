@@ -19,7 +19,7 @@ public partial class RelicRewardWindow : Window
 		InitializeComponent();
 	}
 
-	public RelicRewardWindow(string name, string ducats, string price, int x, int y, int width)
+	public RelicRewardWindow(string name, string price, string ducats, int x, int y, int width)
 	{
 		ItemName = name;
 		Ducats = ducats;

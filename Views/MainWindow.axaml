@@ -8,7 +8,8 @@
         xmlns:src="clr-namespace:framenion.Src"
         x:Name="RootWindow"
         Title="Framenion - A Warframe companion app"
-        Width="1280" Height="720">
+        Width="1280" Height="720"
+        WindowStartupLocation="CenterScreen">
 
     <Grid RowDefinitions="Auto,*">
         <!-- Top Bar -->

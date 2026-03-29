@@ -72,15 +72,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	{
 		Directory.CreateDirectory(GameData.cacheDir);
 		Directory.CreateDirectory(GameData.iconsCacheDir);
-		Opened += async (s, e) => {
-			_ = InitializeAsync();
-		};
-
-		InitializeComponent(true);
-		DataContext = this;
+		InitializeComponent();
 		if (Design.IsDesignMode) {
 			return;
 		}
+		Opened += async (s, e) => {
+			_ = InitializeAsync();
+		};
+		DataContext = this;
 		ItemsList.ItemsSource = displayedItems;
 		FissuresList.ItemsSource = displayedFissures;
 	}
@@ -146,17 +145,34 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	private async Task InitializeDataInBackgroundAsync()
 	{
 		try {
+			string hashPath = Path.Combine(GameData.cacheDir, "export_hash");
+			GameData.httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Framenion");
+			var resp = await GameData.httpClient.GetStringAsync("https://api.github.com/repos/calamity-inc/warframe-public-export-plus/commits/senpai");
+			using var json = JsonDocument.Parse(resp);
+			string latestHash = json.RootElement.GetProperty("sha").GetString() ?? "";
+
+			string localHash =  "";
+			if (File.Exists(hashPath)) {
+				localHash = (await File.ReadAllTextAsync(hashPath)).Trim();
+			}
+
+			bool needsUpdate = !string.IsNullOrEmpty(latestHash) && !string.Equals(localHash.Trim(), latestHash, StringComparison.Ordinal);
+			if (needsUpdate) {
+				await File.WriteAllTextAsync(hashPath, latestHash);
+				ToastWindow.ShowToast(this, "Data initialization", "A new update has been found, updating cache");
+			}
+
 			string[] firstLoad = ["dict.en", "ExportRegions", "ExportMissionTypes", "ExportFactions"];
-			var loadTasks = firstLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir));
+			var loadTasks = firstLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir, needsUpdate));
 			await Task.WhenAll(loadTasks);
 			await Dispatcher.UIThread.InvokeAsync(async () => {
 				await VoidFissure.LoadVoidFissures(this);
 				await RefreshFissuresList();
 			});
 			string[] secondLoad = ["ExportWarframes", "ExportRecipes", "ExportWeapons", "ExportResources", "ExportMisc", "ExportSentinels", "ExportTextIcons"];
-			loadTasks = secondLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir));
+			loadTasks = secondLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir, needsUpdate));
 			await Task.WhenAll(loadTasks);
-			await GameData.LoadWfMarketItems(this);
+			await GameData.LoadWFMarketData(this, needsUpdate);
 
 			await GameData.LoadExports(this);
 			await Dispatcher.UIThread.InvokeAsync(async () => {
@@ -425,7 +441,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			? $"{(matches[0].IsHard ? "Steel Path" : "Normal")} {matches[0].MissionType} {matches[0].Tier} ends in {matches[0].TimeRemaining}"
 			: string.Join(Environment.NewLine, matches.Select(f => $"{(f.IsHard ? "Steel Path" : "Normal")} {f.MissionType} {f.Tier} ends in {f.TimeRemaining}"));
 
-		ToastWindow.ShowToast(this, title, body, TimeSpan.FromSeconds(10));
+		ToastWindow.ShowToast(this, title, body, TimeSpan.FromSeconds(8));
 	}
 
 	private async Task LoadNotifiedFissures()
@@ -469,9 +485,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 				var rewardInfoTasks = rewards.Select(r => GetItemData(r.ItemName)).ToArray();
 				var rewardInfos = await Task.WhenAll(rewardInfoTasks);
 
-				var displayTasks = rewards.Zip(rewardInfos, (reward, info) =>
-				RelicRewardWindow.Display(this, info, reward.Rect.X, reward.Rect.Y + 200, reward.Rect.Width, TimeSpan.FromSeconds(10))
-				);
+				var displayTasks = rewards.Zip(rewardInfos, (reward, info) => RelicRewardWindow.Display(this, info, reward.Rect.X, reward.Rect.Y + GameData.appSettings.OverlayOffset, reward.Rect.Width, TimeSpan.FromSeconds(10)));
 				await Task.WhenAll(displayTasks);
 			} catch (Exception ex) {
 				ToastWindow.ShowToast(this, "Error", "Failed to read rewards: " + ex.Message, TimeSpan.FromSeconds(5));

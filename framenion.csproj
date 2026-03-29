@@ -1,16 +1,19 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
+		<RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net10.0</TargetFramework>
+		<Version>1.1.0</Version>
 		<Nullable>enable</Nullable>
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-		<PublishSingleFile>true</PublishSingleFile>
-		<SelfContained>true</SelfContained>
-		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-		<PublishTrimmed>true</PublishTrimmed>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 		<ApplicationIcon>assets\operator.ico</ApplicationIcon>
 		<LangVersion>preview</LangVersion>
+
+		<PublishSingleFile>true</PublishSingleFile>
+		<EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+		<PublishTrimmed>true</PublishTrimmed>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -25,14 +28,22 @@
 			<PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
 		</PackageReference>
 		<PackageReference Include="OpenCvSharp4" Version="4.13.0.20260318" />
-		<PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260302" />
 		<PackageReference Include="Sdcb.PaddleInference" Version="3.0.1" />
-		<PackageReference Include="Sdcb.PaddleInference.runtime.win64.mkl" Version="3.1.0.54" />
 		<PackageReference Include="Sdcb.PaddleOCR" Version="3.0.1" />
 		<PackageReference Include="Sdcb.PaddleOCR.Models.Online" Version="3.0.1" />
 		<AvaloniaResource Include="assets\**\*.*" />
 		<Content Include="assets\**\*">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</Content>
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+		<PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260302" />
+		<PackageReference Include="Sdcb.PaddleInference.runtime.win64.mkl" Version="3.1.0.54" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-x64'">
+		<PackageReference Include="OpenCvSharp4.runtime.ubuntu.20.04-x64" Version="4.13.0.20260302" />
+		<PackageReference Include="Sdcb.PaddleInference.runtime.linux-x64.mkl" Version="3.1.0.54" />
 	</ItemGroup>
 </Project>

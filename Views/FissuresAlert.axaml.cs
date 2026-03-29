@@ -92,7 +92,7 @@ public partial class FissuresAlert : Window
 			}
 			writer.WriteEndArray();
 			writer.Flush();
-			ToastWindow.ShowToast(this, "Fissure Alert List", "Saved", TimeSpan.FromSeconds(5), ToastAnchor.TopRightOfOwnerWindow);
+			ToastWindow.ShowToast(this, "Fissure Alert List", "Saved", TimeSpan.FromSeconds(3), ToastAnchor.TopRightOfOwnerWindow);
 		} catch (Exception ex) {
 			MessageBox.Show(this, "Error", "Failed to save filters: " + ex.Message);
 		}

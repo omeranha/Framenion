@@ -50,9 +50,12 @@
                       Content="Enable relic reward overlay"
                       Foreground="#D0D0D0"
                       ToolTip.Tip="Enable OCR for relic rewards"/>
-            <Grid ColumnDefinitions="Auto, Auto" ColumnSpacing="10" ToolTip.Tip="Insert Warframe UI scale value">
+            <Grid ColumnDefinitions="Auto, Auto, auto, auto" ColumnSpacing="10" ToolTip.Tip="Insert Warframe UI scale value">
                 <TextBlock Grid.Column="0" Text="UI scale (%)" Foreground="#D0D0D0" VerticalAlignment="Center"/>
                 <NumericUpDown Grid.Column="1" Name="UiScaleNumeric" Minimum="50" Maximum="100" ShowButtonSpinner="False"/>
+
+                <TextBlock Grid.Column="2" Text="Overlay offset" Foreground="#D0D0D0" VerticalAlignment="Center"/>
+                <NumericUpDown Grid.Column="3" Name="OverlayOffset" Minimum="0" ShowButtonSpinner="False"/>
             </Grid>
             <CheckBox Name="DebugOCRBox" Content="Enable OCR debug images" Foreground="#D0D0D0" ToolTip.Tip="Save debug images for relic reward OCR (for troubleshooting)"/>
           </StackPanel>

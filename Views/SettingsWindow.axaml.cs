@@ -30,6 +30,7 @@ public partial class SettingsWindow : Window
 		EnableRelicOverlayBox.IsChecked = settings.EnableRelicOverlay;
 		UiScaleNumeric.Value = settings.UIScale;
 		DebugOCRBox.IsChecked = settings.DebugOCR;
+		OverlayOffset.Value = settings.OverlayOffset;
 	}
 
 	private async void SaveApply_Click(object? sender, RoutedEventArgs e)
@@ -44,6 +45,7 @@ public partial class SettingsWindow : Window
 		settings.EnableRelicOverlay = EnableRelicOverlayBox.IsChecked ?? true;
 		settings.UIScale = (int)(UiScaleNumeric.Value ?? settings.UIScale);
 		settings.DebugOCR = DebugOCRBox.IsChecked ?? false;
+		settings.OverlayOffset = (int)(OverlayOffset.Value ?? settings.OverlayOffset);
 		settings.ApplyToApplicationResources();
 
 		try {

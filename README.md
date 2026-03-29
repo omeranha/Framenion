@@ -14,16 +14,19 @@ Framenion is a fast, lightweight Warframe companion desktop app built with Avalo
   - Normal / Steel Path filtering
   - Tier, mission type, faction, location, and countdown
   - Auto-refresh and live timer updates
-  - Desktop toast notifications for newly opened matching fissures
-- In-app inventory refresh flow using warframe-api-helper (download prompted on first use)
+  - Desktop toast notifications for user selected opened fissures
+- In-app inventory refresh flow using [warframe-api-helper](https://github.com/Sainan/warframe-api-helper) (download prompted on first use)
+- Relic rewards overlay showing item details (ducat value and market price) when opening relics in-game.
+
+## Installation
+
+Download the latest release from the [Releases](https://github.com/omeranha/Framenion/releases), extract the contents and run the executable.
 
 ## To-do
 
 - [ ] Warframe Market integration: Add live price data (buy/sell)
 
 - [ ] Relic viewer: Add a dedicated relic browser with drop tables, rarity tiers, and quick search/filter by relic era and reward.
-
-- [ ] Reward overlay when opening relics:  Show an in-game overlay with item details (owned count, ducat value, market price, mastery/craft relevance) during relic opening.
 
 - [ ] Ensure cross-platform compatibility for Windows and Linux.
 
@@ -37,5 +40,5 @@ Warframe and all related trademarks are the property of their respective owners.
 
 ## Credits
 
-- browse.wf team for infrastructure and data resources: https://browse.wf/ and https://github.com/calamity-inc/warframe-public-export-plus
-- warframe-api-helper for inventory export tooling: https://github.com/Sainan/warframe-api-helper
+- [browse.wf](https://browse.wf/) team for infrastructure and [export](https://github.com/calamity-inc/warframe-public-export-plus) data resources.
+- [warframe-api-helper](https://github.com/Sainan/warframe-api-helper) for inventory export tooling.

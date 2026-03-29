@@ -19,6 +19,7 @@ public sealed class AppSettings
 	public bool EnableRelicOverlay { get; set; } = true;
 	public int UIScale { get; set; } = 100;
 	public bool DebugOCR { get; set; } = false;
+	public int OverlayOffset { get; set; } = 200;
 
 	public static string SettingsPath => Path.Combine(GameData.appDataDir, "settings.json");
 
@@ -30,7 +31,7 @@ public sealed class AppSettings
 			if (!File.Exists(SettingsPath)) return settings;
 
 			await using var stream = File.OpenRead(SettingsPath);
-			using var doc = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
+			using var doc = await JsonDocument.ParseAsync(stream);
 
 			if (doc.RootElement.ValueKind != JsonValueKind.Object) return settings;
 
@@ -45,6 +46,7 @@ public sealed class AppSettings
 			settings.EnableRelicOverlay = ReadBool(root, "enableRelicOverlay", settings.EnableRelicOverlay);
 			settings.UIScale = ReadInt(root, "uiScale", settings.UIScale);
 			settings.DebugOCR = ReadBool(root, "debugOCR", settings.DebugOCR);
+			settings.OverlayOffset = ReadInt(root, "overlayOffset" , settings.OverlayOffset);
 			return settings;
 		} catch {
 			return settings;
@@ -70,6 +72,7 @@ public sealed class AppSettings
 		writer.WriteBoolean("enableRelicOverlay", EnableRelicOverlay);
 		writer.WriteNumber("uiScale", UIScale);
 		writer.WriteBoolean("debugOCR", DebugOCR);
+		writer.WriteNumber("overlayOffset", OverlayOffset);
 		writer.WriteEndObject();
 
 		await writer.FlushAsync().ConfigureAwait(false);

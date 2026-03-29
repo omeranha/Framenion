@@ -57,6 +57,7 @@ public partial class ToastWindow : Window
 
 		var toastOwner = NormalizeToastOwner(owner, anchor);
 		var toast = new ToastWindow { Topmost = true };
+		toast.Owner = owner;
 		toast.TitleText.Text = title;
 		toast.BodyText.Text = body;
 		toast.anchor = anchor;

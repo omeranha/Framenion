@@ -127,60 +127,49 @@ public static class GameData
 		}));
 	}
 
-	public static async Task LoadWfMarketItems(Window window)
+	public static async Task LoadWFMarketData(Window window, bool updateFile)
 	{
 		var cacheFile = Path.Combine(cacheDir, "wfmarketitems.json");
-		var cacheValid = File.Exists(cacheFile) && DateTime.UtcNow - File.GetLastWriteTimeUtc(cacheFile) < TimeSpan.FromHours(24);
-		JsonDocument? doc = null;
-
 		try {
-			if (cacheValid) {
-				using var stream = File.OpenRead(cacheFile);
-				doc = await JsonDocument.ParseAsync(stream);
-			} else {
+			if (updateFile) {
 				var url = "https://api.warframe.market/v2/items/";
 				using var resp = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
 				resp.EnsureSuccessStatusCode();
 				await using var stream = await resp.Content.ReadAsStreamAsync();
 
-				using (var fileStream = File.Create(cacheFile)) {
-					await stream.CopyToAsync(fileStream);
-				}
-
-				using var cacheStream = File.OpenRead(cacheFile);
-				doc = await JsonDocument.ParseAsync(cacheStream);
+				using var fileStream = File.Create(cacheFile);
+				await stream.CopyToAsync(fileStream);
 			}
 
+			using var cacheStream = File.OpenRead(cacheFile);
+			using var doc = await JsonDocument.ParseAsync(cacheStream);
 			var builder = new Dictionary<string, (string, string)>(StringComparer.Ordinal);
-
-			if (doc.RootElement.TryGetProperty("data", out var payload) && payload.ValueKind == JsonValueKind.Array) {
-				foreach (var item in payload.EnumerateArray()) {
-					if (item.TryGetProperty("slug", out var slugProp) &&
-						item.TryGetProperty("i18n", out var i18nProp) &&
-						i18nProp.TryGetProperty("en", out var enProp) &&
-						enProp.TryGetProperty("name", out var nameProp)) {
-						var slug = slugProp.GetString() ?? "";
-						var name = nameProp.GetString() ?? "";
-						string ducats = "";
-						if (item.TryGetProperty("ducats", out var ducatsProp) && ducatsProp.ValueKind == JsonValueKind.Number)
-							ducats = ducatsProp.GetInt32().ToString();
-						builder[name] = (slug, ducats);
+			if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array) {
+				foreach (var item in data.EnumerateArray()) {
+					item.TryGetProperty("slug", out var slugProp);
+					item.TryGetProperty("i18n", out var i18nProp);
+					i18nProp.TryGetProperty("en", out var enProp);
+					enProp.TryGetProperty("name", out var nameProp);
+					var slug = slugProp.GetString() ?? "";
+					var ducats = "0";
+					if (item.TryGetProperty("ducats", out var ducatsProp) && ducatsProp.ValueKind == JsonValueKind.Number) {
+						ducats = ducatsProp.GetInt32().ToString();
 					}
+					var name = nameProp.GetString() ?? "";
+					builder[name] = (slug, ducats);
 				}
 			}
 
 			warframeMarketItems = builder.ToFrozenDictionary(StringComparer.Ordinal);
 		} catch (Exception ex) {
 			MessageBox.Show(window, "Error", "Failed to load Warframe Market items: " + ex.Message);
-		} finally {
-			doc?.Dispose();
 		}
 	}
 
-	public static async Task LoadFile(Window window, string file, string cacheDir)
+	public static async Task LoadFile(Window window, string file, string cacheDir, bool updateFile)
 	{
 		var exportCacheFile = Path.Combine(cacheDir, file + ".json");
-		if (!File.Exists(exportCacheFile)) {
+		if (!File.Exists(exportCacheFile) || updateFile) {
 			try {
 				var url = "https://raw.githubusercontent.com/calamity-inc/warframe-public-export-plus/refs/heads/senpai/" + file + ".json";
 
@@ -250,7 +239,7 @@ public static class GameData
 					}
 			}
 		} catch (Exception ex) {
-			throw new Exception("Failed to load file: " + file, ex);
+			MessageBox.Show(window, "Error", $"Error loading file: {ex.Message}");
 		}
 	}
 
@@ -363,55 +352,57 @@ public static class GameData
 		var exeFileName = isWindows ? "warframe-api-helper.exe" : "warframe-api-helper";
 		var exePath = Path.Combine(GameData.appDataDir, exeFileName);
 		if (!File.Exists(exePath)) {
-			if (await MessageBox.AskYesNo(window, "Download required component", "Do you want to download warframe-api-helper from its official GitHub repository?")) {
-				string url = isWindows
-					? "https://github.com/Sainan/warframe-api-helper/releases/download/1.1.1/warframe-api-helper.exe"
-					: "https://github.com/Sainan/warframe-api-helper/releases/download/1.1.1/Linux.zip";
-				var tempPath = Path.Combine(GameData.appDataDir, Path.GetRandomFileName());
-				try {
-					using var download = await GameData.httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-					download.EnsureSuccessStatusCode();
-					await using (var inStream = await download.Content.ReadAsStreamAsync())
-					await using (var outStream = File.Create(tempPath)) {
-						await inStream.CopyToAsync(outStream);
-					}
+			if (!await MessageBox.AskYesNo(window, "Download required component", "Do you want to download warframe-api-helper from its official GitHub repository?")) {
+				return;
+			}
 
-					if (!isWindows && url.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) {
-						try {
-							System.IO.Compression.ZipFile.ExtractToDirectory(tempPath, GameData.appDataDir);
-							var extracted = Directory.EnumerateFiles(GameData.appDataDir, "warframe-api-helper*", SearchOption.AllDirectories)
-								.FirstOrDefault(f => Path.GetFileName(f).StartsWith("warframe-api-helper", StringComparison.Ordinal)) ?? throw new FileNotFoundException("Extracted helper not found.");
-							if (File.Exists(exePath)) File.Delete(exePath);
-							File.Move(extracted, exePath);
-						} finally {
-							try { File.Delete(tempPath); } catch { }
-						}
-
-						if (!isWindows) {
-							try {
-								using var chmod = new Process {
-									StartInfo = new ProcessStartInfo {
-										FileName = "chmod",
-										Arguments = $"+x \"{exePath}\"",
-										UseShellExecute = false,
-										CreateNoWindow = true
-									}
-								};
-								chmod.Start();
-								await chmod.WaitForExitAsync();
-							} catch {
-								// todo: test proceed but the helper might fail without exec bit
-							}
-						}
-					} else {
-						if (File.Exists(exePath)) File.Delete(exePath);
-						File.Move(tempPath, exePath);
-					}
-				} catch (Exception ex) {
-					try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-					MessageBox.Show(window, "Error", "Failed to download component: " + ex.Message);
-					return;
+			string url = isWindows
+				? "https://github.com/Sainan/warframe-api-helper/releases/download/1.1.1/warframe-api-helper.exe"
+				: "https://github.com/Sainan/warframe-api-helper/releases/download/1.1.1/Linux.zip";
+			var tempPath = Path.Combine(GameData.appDataDir, Path.GetRandomFileName());
+			try {
+				using var download = await GameData.httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+				download.EnsureSuccessStatusCode();
+				await using (var inStream = await download.Content.ReadAsStreamAsync())
+				await using (var outStream = File.Create(tempPath)) {
+					await inStream.CopyToAsync(outStream);
 				}
+
+				if (!isWindows && url.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) {
+					try {
+						System.IO.Compression.ZipFile.ExtractToDirectory(tempPath, GameData.appDataDir);
+						var extracted = Directory.EnumerateFiles(GameData.appDataDir, "warframe-api-helper*", SearchOption.AllDirectories)
+							.FirstOrDefault(f => Path.GetFileName(f).StartsWith("warframe-api-helper", StringComparison.Ordinal)) ?? throw new FileNotFoundException("Extracted helper not found.");
+						if (File.Exists(exePath)) File.Delete(exePath);
+						File.Move(extracted, exePath);
+					} finally {
+						try { File.Delete(tempPath); } catch { }
+					}
+
+					if (!isWindows) {
+						try {
+							using var chmod = new Process {
+								StartInfo = new ProcessStartInfo {
+									FileName = "chmod",
+									Arguments = $"+x \"{exePath}\"",
+									UseShellExecute = false,
+									CreateNoWindow = true
+								}
+							};
+							chmod.Start();
+							await chmod.WaitForExitAsync();
+						} catch {
+							// todo: test proceed but the helper might fail without exec bit
+						}
+					}
+				} else {
+					if (File.Exists(exePath)) File.Delete(exePath);
+					File.Move(tempPath, exePath);
+				}
+			} catch (Exception ex) {
+				try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+				MessageBox.Show(window, "Error", "Failed to download component: " + ex.Message);
+				return;
 			}
 		}
 
