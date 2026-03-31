@@ -1,14 +1,11 @@
-﻿using Avalonia;
-using Avalonia.Markup.Xaml.Templates;
-using OpenCvSharp;
+﻿using OpenCvSharp;
 using Sdcb.PaddleOCR;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using Rect = OpenCvSharp.Rect;
+using System.Text;
 
 namespace framenion.Src;
 
@@ -20,49 +17,44 @@ public class RelicRewardOCR
 		public Rect Rect;
 	}
 
+	private const int ocrScale = 2;
+
+	// 1920x1080 100 UI scale reference values
+	private const int rewardsWidth = 968;
+	private const int rewardsHeight = 235;
+	private const int rewardsY = 316;
+	private const int itemNameHeight = 48;
+
 	public static List<Reward> ReadRewards(Mat screenshot, PaddleOcrAll? engine)
 	{
 		var rewards = new List<Reward>();
-		if (!OperatingSystem.IsWindows()) return rewards;
-		if (engine == null) return rewards;
 
-		var topHalfRect = new Rect(0, 0, screenshot.Width, screenshot.Height / 2);
-		screenshot = screenshot[topHalfRect];
+		if (!OperatingSystem.IsWindows() || engine == null) return rewards;
+
+		double uiScale = GameData.appSettings.UIScale / 100.0;
+		int mostWidth = (int)(rewardsWidth * uiScale);
+		int rewardsAreaWidth = (int)(rewardsWidth * uiScale);
+		int rewardsAreaLeft = (screenshot.Width / 2) - (rewardsAreaWidth / 2);
+		int rewardsAreaTop = screenshot.Height / 2 - (int)((rewardsY - rewardsHeight + itemNameHeight) * uiScale);
+		int rewardsAreaBottom = screenshot.Height / 2 - (int)((rewardsY - rewardsHeight) * uiScale * 0.5);
+		var rewardsRect = new Rect(rewardsAreaLeft, rewardsAreaTop, rewardsAreaWidth, rewardsAreaBottom - rewardsAreaTop);
+		using var cropped = screenshot[rewardsRect].Clone();
+		Cv2.Resize(cropped, cropped, new Size(), ocrScale, ocrScale, InterpolationFlags.Lanczos4);
 		if (GameData.appSettings.DebugOCR) {
-			Cv2.ImWrite(Path.Combine(GameData.appDataDir, "debug_screenshot.png"), screenshot);
+			Cv2.ImWrite(Path.Combine(GameData.appDataDir, "debug_itemnames.png"), cropped);
 		}
 
-		Mat template = Cv2.ImRead(Path.Combine(AppContext.BaseDirectory, "assets", "template.png"), ImreadModes.Grayscale);
-		var rewardsY = DetectRewardsY(screenshot, template);
-		if (rewardsY == -1) return rewards;
-
-		int rewardsHeight = (int)(250 * (GameData.appSettings.UIScale / 100.0));
-		var rewardsRect = new Rect(0, rewardsY, screenshot.Width, rewardsHeight);
-		screenshot = screenshot[rewardsRect];
-
-		int rewardsYOffset = topHalfRect.Y + rewardsRect.Y;
-
-		var textRect = new Rect(0, screenshot.Height / 2, screenshot.Width, screenshot.Height - screenshot.Height / 2);
-		var textCrop = screenshot[textRect];
-
-		if (GameData.appSettings.DebugOCR) {
-			Cv2.ImWrite(Path.Combine(GameData.appDataDir, "debug_itemnames.png"), textCrop);
-		}
-		var itemNames = engine.Run(textCrop);
-
-		static float GetX1(RotatedRect rect)
-		{
-			var pts = rect.Points();
-			return pts.Min(p => p.X);
-		}
-
-		float xThreshold = 150f;
+		var itemNames = engine.Run(cropped);
+		float xThreshold = 200f;
 		var words = itemNames.Regions.Where(r => !string.IsNullOrWhiteSpace(r.Text))
-			.Select(r => (region: r, x1: GetX1(r.Rect))).OrderBy(t => t.x1).ToList();
+			.Select(r => (region: r, x1: r.Rect.Center.X)).OrderBy(t => t.x1).ToList();
 
 		var columns = new List<List<PaddleOcrResultRegion>>();
 		foreach (var (region, x1) in words) {
-			var col = columns.FirstOrDefault(c => Math.Abs(GetX1(c[0].Rect) - x1) < xThreshold);
+			var col = columns.FirstOrDefault(c => {
+				float avgX = c.Average(r => r.Rect.Center.X);
+				return Math.Abs(avgX - x1) < xThreshold;
+			});
 			if (col == null) {
 				col = [];
 				columns.Add(col);
@@ -75,80 +67,56 @@ public class RelicRewardOCR
 		}
 
 		foreach (var col in columns) {
-			var itemName = string.Join(" ", col.Select(r => r.Text)).Trim();
-			if (!string.IsNullOrEmpty(itemName)) {
-				if (itemName.Contains("Forma") || itemName.Contains("Riven") || itemName.Contains("Star")) {
-					continue;
-				}
+			var validWords = col.Where(r => r.Text.Length >= 2 || r.Text == "&").ToList();
+			if (validWords.Count == 0) continue;
 
-				var regionRect = col[0].Rect.BoundingRect();
-				var adjustedRect = new Rect(
-					regionRect.X + rewardsRect.X,
-					regionRect.Y + rewardsYOffset,
-					regionRect.Width,
-					regionRect.Height
-				);
-				rewards.Add(new Reward { ItemName = itemName, Rect = adjustedRect });
-			}
+			var itemName = string.Join(" ", validWords.Select(r => NormalizeItemName(r.Text))).Trim();
+			if (string.IsNullOrEmpty(itemName) || itemName.Contains("Forma") || itemName.Contains("Riven") || itemName.Contains("Star")) continue;
+
+			var rects = validWords.Select(r => r.Rect.BoundingRect()).ToList();
+			int left = rects.Min(r => r.X); // leftmost edge of first word
+			int right = rects.Max(r => r.X + r.Width); // rightmost edge of last word
+			int bottom = rects.Max(r => r.Y + r.Height); // bottom edge of the lowest word in the column
+			var last = rects[^1]; // the last word in the column
+			var itemRect = new Rect(
+				rewardsRect.X + (left / ocrScale),
+				rewardsRect.Y + ((bottom - last.Height) / ocrScale),
+				(right - left) / ocrScale,
+				last.Height / ocrScale
+			);
+			rewards.Add(new Reward { ItemName = itemName, Rect = itemRect });
 		}
 		return rewards;
 	}
 
-	public static int DetectRewardsY(Mat input, Mat template)
+	public static string NormalizeItemName(string text)
 	{
-		var detections = new List<((int x, int y), double score)>();
-		using var edgeTemplate = new Mat();
-		using var grayInput = new Mat();
-		Cv2.CvtColor(input, grayInput, ColorConversionCodes.BGR2GRAY);
-		Cv2.Canny(template, edgeTemplate, 50, 150);
+		if (string.IsNullOrEmpty(text))
+			return text;
 
-		using var current = grayInput.Clone();
-		double scale = 1.0;
-		const double scaleStep = 0.8;
-		const double threshold = 0.5;
-		const double minAspect = 0.6;
-		const double maxAspect = 1.5;
-		int minY = (int)(input.Rows * 0.1);
-		while (current.Width >= template.Width && current.Height >= template.Height) {
-			using var edgeCurrent = new Mat();
-			using var result = new Mat();
-			Cv2.Canny(current, edgeCurrent, 50, 150);
-			Cv2.MatchTemplate(edgeCurrent, edgeTemplate, result, TemplateMatchModes.CCoeffNormed);
-			for (int y = 0; y < result.Rows; y++) {
-				for (int x = 0; x < result.Cols; x++) {
-					float score = result.At<float>(y, x);
-					if (score < threshold) continue;
+		var builder = new StringBuilder(text.Length * 2);
+		char previous = text[0];
+		builder.Append(previous);
+		for (int i = 1; i < text.Length; i++) {
+			char c = text[i];
 
-					int rx = (int)(x / scale);
-					int ry = (int)(y / scale);
-					int rw = (int)(template.Width / scale);
-					int rh = (int)(template.Height / scale);
-
-					if (ry < minY) continue;
-					float aspect = (float)rw / rh;
-					if (aspect < minAspect || aspect > maxAspect) continue;
-
-					detections.Add(((rx, ry), score));
-				}
+			bool isUpper = (uint)(c - 'A') <= ('Z' - 'A');
+			bool prevIsLower = (uint)(previous - 'a') <= ('z' - 'a');
+			if (isUpper && prevIsLower) {
+				builder.Append(' ');
 			}
-			scale *= scaleStep;
-			Cv2.Resize(current, current, new OpenCvSharp.Size(), scaleStep, scaleStep);
+
+			builder.Append(c);
+			previous = c;
 		}
 
-		if (detections.Count == 0) return -1;
-
-		return detections.Select(d => {
-			double distanceToCenter = Math.Abs(d.Item1.x - (input.Width / 2.0));
-			double finalScore = d.score - (distanceToCenter * 0.001);
-			return (d.Item1.y, finalScore);
-		}).OrderByDescending(x => x.finalScore).First().y;
+		return builder.ToString();
 	}
 }
 
+#region Win32
 public static class ScreenCapture
 {
-	#region Win32
-
 	[DllImport("user32.dll")]
 	private static extern bool ReleaseDC(IntPtr hWnd, IntPtr hDC);
 

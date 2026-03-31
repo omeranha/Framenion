@@ -116,18 +116,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			GameData.fissureUpdateTimer.Start();
 			GameData.fissureRefreshTimer.Start();
 
-			GameData.logPollTimer.Tick += (_, _) => ReadNewLogData(EElog);
+			GameData.logPollTimer.Tick += (_, _) => ReadEELog();
 			if (GameData.appSettings.EnableEELogRead) {
 				GameData.logPollTimer.Start();
 			}
 
-			if (GameData.appSettings.EnableRelicOverlay) {
-				FullOcrModel model = await OnlineFullModels.EnglishV3.DownloadAsync();
-				GameData.paddleEngine = new(model, PaddleDevice.Mkldnn()) {
-					AllowRotateDetection = false,
-					Enable180Classification = false,
-				};
-			}
+			FullOcrModel model = await OnlineFullModels.EnglishV4.DownloadAsync();
+			GameData.paddleEngine = new(model, PaddleDevice.PlatformDefault) {
+				AllowRotateDetection = false,
+				Enable180Classification = false,
+			};
 			await InitializeDataInBackgroundAsync();
 		} catch (Exception ex) {
 			MessageBox.Show(this, "Error", "Failed to initialize application: " + ex.Message);
@@ -135,7 +133,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			IsLoading = false;
 			keyboardHook.KeyEvent += key => {
 				if (key == Avalonia.Input.Key.PrintScreen) {
-					Dispatcher.UIThread.Post(ReadRelicWindow);
+					Dispatcher.UIThread.Post(() => {
+						try {
+							ReadRelicWindow(false);
+						} catch (Exception ex) {
+							MessageBox.Show(this, "Error", $"Failed to read rewards: {ex.Message}");
+						}
+					});
 				}
 			};
 			keyboardHook.Hook();
@@ -319,33 +323,29 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		return baseXp * (long)levelCap * (long)levelCap;
 	}
 
-	private string ReadAccountName()
+	private static string ReadAccountName()
 	{
 		if (!File.Exists(EElog)) return "";
 
 		const string marker = "Logged in ";
-		try {
-			var fileInfo = new FileInfo(EElog);
-			long fileLength = fileInfo.Length;
-			using var fs = new FileStream(EElog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-			using var mmf = MemoryMappedFile.CreateFromFile(fs, null, 0, MemoryMappedFileAccess.Read, HandleInheritability.None, false);
-			using var stream = mmf.CreateViewStream(0, fileLength, MemoryMappedFileAccess.Read);
-			using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+		var fileInfo = new FileInfo(EElog);
+		long fileLength = fileInfo.Length;
+		using var fs = new FileStream(EElog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+		using var mmf = MemoryMappedFile.CreateFromFile(fs, null, 0, MemoryMappedFileAccess.Read, HandleInheritability.None, false);
+		using var stream = mmf.CreateViewStream(0, fileLength, MemoryMappedFileAccess.Read);
+		using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
 
-			string? line;
-			while ((line = reader.ReadLine()) != null) {
-				int idx = line.IndexOf(marker, StringComparison.Ordinal);
-				if (idx >= 0) {
-					var payload = line[(idx + marker.Length)..].Trim();
-					var open = payload.LastIndexOf('(');
-					if (open > 0) {
-						var name = payload[..open].Trim();
-						if (name.Length > 0) return name.TrimEnd('-', ':').Trim();
-					}
+		string? line;
+		while ((line = reader.ReadLine()) != null) {
+			int idx = line.IndexOf(marker, StringComparison.Ordinal);
+			if (idx >= 0) {
+				var payload = line[(idx + marker.Length)..].Trim();
+				var open = payload.LastIndexOf('(');
+				if (open > 0) {
+					var name = payload[..open].Trim();
+					if (name.Length > 0) return name.TrimEnd('-', ':').Trim();
 				}
 			}
-		} catch {
-			MessageBox.Show(this, "Error", "Failed to read account name from EE.log.");
 		}
 
 		return "";
@@ -471,13 +471,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		}
 	}
 
-	private void ReadRelicWindow()
+	private void ReadRelicWindow(bool auto)
 	{
 		if (!GameData.appSettings.EnableRelicOverlay) return;
 
 		_ = Task.Run(async () => {
 			try {
-				await Task.Delay(2000);
+				if (auto) {
+					await Task.Delay(2000);
+				}
 				var screenshot = ScreenCapture.Capture();
 				var rewards = RelicRewardOCR.ReadRewards(screenshot, GameData.paddleEngine);
 				if (rewards.Count == 0) {
@@ -490,7 +492,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 				var displayTasks = rewards.Zip(rewardInfos, (reward, info) => RelicRewardWindow.Display(this, info, reward.Rect.X, reward.Rect.Y + GameData.appSettings.OverlayOffset, reward.Rect.Width, TimeSpan.FromSeconds(10)));
 				await Task.WhenAll(displayTasks);
 			} catch (Exception ex) {
-				ToastWindow.ShowToast(this, "Error", "Failed to read rewards: " + ex.Message, TimeSpan.FromSeconds(5));
+				MessageBox.Show(this, "Error", $"Failed to read rewards: {ex.Message}");
 			}
 		});
 	}
@@ -522,9 +524,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		return rewardInfo;
 	}
 
-	private void ReadNewLogData(string logPath)
+	private void ReadEELog()
 	{
-		if (!File.Exists(logPath)) return;
+		if (!File.Exists(EElog)) return;
 
 		var process = Process.GetProcessesByName("Warframe.x64").FirstOrDefault();
 		bool wfRunning = process != null;
@@ -543,7 +545,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 		if (!wfRunning) return;
 
-		var fileInfo = new FileInfo(logPath);
+		var fileInfo = new FileInfo(EElog);
 		long fileLength = fileInfo.Length;
 		if (lastPosition > fileLength) lastPosition = 0;
 		if (lastPosition == 0 && fileLength > 0) {
@@ -552,7 +554,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		}
 
 		if (fileLength > lastPosition) {
-			using var fs = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+			using var fs = new FileStream(EElog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 			using var mmf = MemoryMappedFile.CreateFromFile(fs, null, 0, MemoryMappedFileAccess.Read, HandleInheritability.None, false);
 			using var accessor = mmf.CreateViewAccessor(lastPosition, fileLength - lastPosition, MemoryMappedFileAccess.Read);
 
@@ -563,9 +565,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			using var reader = new StringReader(text);
 			string? line;
 			while ((line = reader.ReadLine()) != null) {
-				if (!line.Contains("Relic rewards initialized")) continue;
+				if (!line.Contains("Got rewards")) continue;
 
-				ReadRelicWindow();
+				ReadRelicWindow(true);
 			}
 			lastPosition = fileLength;
 		}

@@ -116,7 +116,7 @@ public static class GameData
 		}
 	}
 
-	public static async Task DownloadIconsAsync(Window window, IEnumerable<string> icons)
+	public static async Task DownloadIconsAsync(IEnumerable<string> icons)
 	{
 		var failures = new ConcurrentBag<string>();
 		await Task.WhenAll(icons.Where(i => !string.IsNullOrEmpty(i)).Select(async icon => {
@@ -308,7 +308,7 @@ public static class GameData
 				iconUrls.Add(element.GetProperty("icon").ToString());
 				foreach (var url in GetIngredientIconUrls(type)) iconUrls.Add(url);
 			}
-			await DownloadIconsAsync(window, iconUrls);
+			await DownloadIconsAsync(iconUrls);
 
 			foreach (var (type, warframe) in exportWarframes) {
 				var name = ResolveName(warframe.GetProperty("name").GetString() ?? "");
