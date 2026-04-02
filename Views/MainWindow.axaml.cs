@@ -179,10 +179,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			await GameData.LoadWFMarketData(this, needsUpdate);
 
 			await GameData.LoadExports(this);
-			await Dispatcher.UIThread.InvokeAsync(async () => {
-				await ParseInfo();
-				RefreshItemsList();
-			});
+			await ParseInfo();
 		} catch (Exception e) {
 			MessageBox.Show(this, "Error", "Failed to initialize data in background: " + e.Message);
 		}
@@ -194,6 +191,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			return;
 		}
 
+		string playerName = "";
+		string platinumText = "";
+		string creditsText = "";
+		string masteryText = "";
+		Bitmap? masteryIcon = null;
+		Bitmap? playerIcon = null;
+
 		await using var stream = File.OpenRead(inventoryFile);
 		using var doc = await JsonDocument.ParseAsync(stream);
 		var root = doc.RootElement;
@@ -203,36 +207,33 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		if (GameData.appSettings.EnableEELogRead) {
 			var loggedInName = ReadAccountName();
 			if (!string.IsNullOrWhiteSpace(loggedInName)) {
-				PlayerName.Text = loggedInName;
+				playerName = loggedInName;
 			}
 		}
 
 		if (root.TryGetProperty("PremiumCredits", out var platinum) && platinum.TryGetInt64(out var p)) {
-			PlatinumText.Text = p.ToString("N0");
+			platinumText = p.ToString("N0");
 		}
 		if (root.TryGetProperty("RegularCredits", out var credits) && credits.TryGetInt64(out var c)) {
-			CreditsText.Text = c.ToString("N0");
+			creditsText = c.ToString("N0");
 		}
 
 		root.TryGetProperty("PlayerLevel", out var mr);
 		var mr_str = (mr.GetUInt16() > 30) ? "L" + (mr.GetUInt16() - 30) : mr.ToString();
-		MasteryText.Text = mr_str;
-		GameData.exportTextIcons.TryGetValue($"RANK_{mr}", out var rankIconEl);
-		if (rankIconEl.TryGetProperty("DIT_AUTO", out var rankIconPathEl)) {
-			var icon_resp = await GameData.httpClient.GetAsync(rankIconPathEl.ToString());
-			var bitmap = new Bitmap(await icon_resp.Content.ReadAsStreamAsync());
-			MasteryIcon.Source = bitmap;
+		masteryText = mr_str;
+		if (GameData.exportTextIcons.TryGetValue($"RANK_{mr}", out var rankIconEl)) {
+			using var icon_resp = await GameData.httpClient.GetAsync(rankIconEl);
+			masteryIcon = new Bitmap(await icon_resp.Content.ReadAsStreamAsync());
 		}
 
 		root.TryGetProperty("ActiveAvatarImageType", out var icon_path);
-		var glyph_resp = await GameData.httpClient.GetAsync(icon_path.ToString());
+		using var glyph_resp = await GameData.httpClient.GetAsync(icon_path.ToString());
 		glyph_resp.EnsureSuccessStatusCode();
-		var glyph_doc = await JsonDocument.ParseAsync(await glyph_resp.Content.ReadAsStreamAsync());
+		using var glyph_doc = await JsonDocument.ParseAsync(await glyph_resp.Content.ReadAsStreamAsync());
 		if (glyph_doc.RootElement.ValueKind == JsonValueKind.Object) {
 			glyph_doc.RootElement.TryGetProperty("icon", out var icon_url);
 			var icon_resp = await GameData.httpClient.GetAsync(icon_url.ToString());
-			var bitmap = new Bitmap(await icon_resp.Content.ReadAsStreamAsync());
-			PlayerIcon.Source = bitmap;
+			playerIcon = new Bitmap(await icon_resp.Content.ReadAsStreamAsync());
 		}
 
 		if (!GameData.mainRoot.TryGetProperty("MiscItems", out var miscEl) ||
@@ -262,15 +263,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 				if (e.TryGetProperty("ItemType", out var t) && t.GetString() is string tStr)
 					ownedTypes.Add(tStr);
 
-		var miscByType = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+		var miscByType = new Dictionary<string, int>(StringComparer.Ordinal);
 		foreach (var e in miscEl.EnumerateArray())
 			if (e.TryGetProperty("ItemType", out var t) && t.GetString() is string tStr)
-				miscByType[tStr] = e;
+				miscByType[tStr] = e.GetProperty("ItemCount").GetInt32();
 
-		var recipesByType = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-		foreach (var e in recipesEl.EnumerateArray())
-			if (e.TryGetProperty("ItemType", out var t) && t.GetString() is string tStr)
-				recipesByType[tStr] = e;
+		var recipesByType = new Dictionary<string, int>(StringComparer.Ordinal);
+		foreach (var e in recipesEl.EnumerateArray()) {
+			if (e.TryGetProperty("ItemType", out var t) && t.GetString() is string tStr) {
+				recipesByType[tStr] = e.GetProperty("ItemCount").GetInt32();
+			}
+		}
 
 		foreach (var item in GameData.itemsList) {
 			var resultType = item.Type;
@@ -282,40 +285,48 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 			foreach (var ingred in item.Ingredients) {
 				var type = ingred.ItemType;
-				if (!miscByType.TryGetValue(type, out var ingred_entry) && !recipesByType.TryGetValue(ingred.RecipeKey, out ingred_entry)) {
+				if (!miscByType.TryGetValue(type, out var ingred_count) && !recipesByType.TryGetValue(ingred.RecipeKey, out ingred_count)) {
 					continue;
 				}
 
-				var count = ingred_entry.GetProperty("ItemCount");
-				ingred.OwnedCount = count.GetInt32();
-
-				if (GameData.exportRecipes.TryGetValue(type, out var subRecipe) && subRecipe.Item2.TryGetProperty("ingredients", out var subIngredientsEl)
-					&& subIngredientsEl.ValueKind == JsonValueKind.Array) {
-					bool canCraft = subIngredientsEl.EnumerateArray().All(sub =>
-						sub.TryGetProperty("ItemType", out var st) && st.GetString() is string subType
-						&& sub.TryGetProperty("ItemCount", out var sc)
-						&& miscByType.TryGetValue(subType, out var subEntry)
-						&& subEntry.TryGetProperty("ItemCount", out var ownedEl)
-						&& ownedEl.GetInt32() >= sc.GetInt32());
-
-					if (canCraft && ingred.BackgroundColor == "#252525") ingred.BorderColor = "#4A9EFF";
+				ingred.OwnedCount = ingred_count;
+				if (!GameData.exportRecipes.TryGetValue(type, out var subRecipe) || subRecipe.recipe.Ingredients == null) continue;
+				var subIngredients = subRecipe.recipe.Ingredients;
+				bool canCraft = true;
+				foreach (var sub in subIngredients) {
+					if (!miscByType.TryGetValue(sub.Type, out var subEntry) || subEntry < sub.Count) {
+						canCraft = false;
+						break;
+					}
 				}
+
+				if (canCraft && ingred.BackgroundColor == "#252525") ingred.BorderColor = "#4A9EFF";
 			}
 
 			if (item.Ingredients.Count > 0 && item.Ingredients.All(i => i.OwnedCount >= i.Count)) item.BorderColor = "#4A9EFF";
+
+			await Dispatcher.UIThread.InvokeAsync(() => {
+				if (!string.IsNullOrWhiteSpace(playerName)) PlayerName.Text = playerName;
+				PlatinumText.Text = platinumText;
+				CreditsText.Text = creditsText;
+				MasteryText.Text = masteryText;
+
+				if (masteryIcon != null) {
+					MasteryIcon.Source = masteryIcon;
+				}
+				if (playerIcon != null) {
+					PlayerIcon.Source = playerIcon;
+				}
+				RefreshItemsList();
+			});
 		}
 	}
 
 	private static long XpToMaster(string type)
 	{
 		int levelCap = 30;
-		if (GameData.exportMisc == null || GameData.exportMisc.RootElement.ValueKind != JsonValueKind.Object)
-			return levelCap;
-
-		if (GameData.exportMisc.RootElement.TryGetProperty("uniqueLevelCaps", out var levelCapsEl) && levelCapsEl.ValueKind == JsonValueKind.Object) {
-			if (levelCapsEl.TryGetProperty(type, out var capEl) && capEl.ValueKind == JsonValueKind.Number) {
-				levelCap = capEl.GetInt32();
-			}
+		if (GameData.uniquelevelCaps.Contains(type)) {
+			levelCap = 40;
 		}
 
 		bool isWarframe = type.Contains("/Lotus/Powersuits/", StringComparison.Ordinal);
@@ -502,9 +513,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		GameData.warframeMarketItems.TryGetValue(itemName, out var marketInfo);
 		var rewardInfo = new RewardInfo(itemName);
 		try {
-			if (!string.IsNullOrEmpty(marketInfo.Item1)) {
-				rewardInfo.Ducats = marketInfo.Item2;
-				var resp = await GameData.httpClient.GetAsync($"https://api.warframe.market/v2/orders/item/{marketInfo.Item1}/top");
+			if (!string.IsNullOrEmpty(marketInfo.slug)) {
+				rewardInfo.Ducats = marketInfo.ducats;
+				var resp = await GameData.httpClient.GetAsync($"https://api.warframe.market/v2/orders/item/{marketInfo.slug}/top");
 				resp.EnsureSuccessStatusCode();
 				using var stream = await resp.Content.ReadAsStreamAsync();
 				using var doc = await JsonDocument.ParseAsync(stream);
@@ -534,10 +545,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			lastWfRunning = wfRunning;
 			Dispatcher.UIThread.Post(() => {
 				if (wfRunning) {
-					WarframeOpened.Source = GameData.DecodeThumbnail(Path.Combine(AppContext.BaseDirectory, "assets", "check_d.png"));
+					WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "check_d.png"));
 					ToolTip.SetTip(WarframeOpened, "Warframe is up and running\nReading log data.");
 				} else {
-					WarframeOpened.Source = GameData.DecodeThumbnail(Path.Combine(AppContext.BaseDirectory, "assets", "uncheck_d.png"));
+					WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "uncheck_d.png"));
 					ToolTip.SetTip(WarframeOpened, "Warframe is closed\nNot reading log data.");
 				}
 			});

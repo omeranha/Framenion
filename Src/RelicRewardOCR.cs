@@ -181,7 +181,7 @@ public static class ScreenCapture
 		bmpData.bmiHeader.biBitCount = 32;
 		bmpData.bmiHeader.biCompression = 0;
 
-		GetDIBits(hMemDC, hBitmap, 0, (uint)height, output.Data, ref bmpData, 0);
+		_ = GetDIBits(hMemDC, hBitmap, 0, (uint)height, output.Data, ref bmpData, 0);
 
 		// cleanup
 		SelectObject(hMemDC, hOld);

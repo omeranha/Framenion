@@ -80,22 +80,22 @@ public class VoidFissure : INotifyPropertyChanged
 				var modifier = mission.GetProperty("Modifier").ToString();
 				var timestamp = long.Parse(mission.GetProperty("Expiry").GetProperty("$date").GetProperty("$numberLong").ToString());
 				var node = mission.GetProperty("Node").ToString();
-				JsonElement nodeInfo = GameData.exportRegions[node];
+				var nodeInfo = GameData.exportRegions[node];
 				int baseLvl = (mission.TryGetProperty("Hard", out var hardEl) && hardEl.GetBoolean()) ? 100 : 0;
-				var missionType = culture.ToTitleCase(GameData.lang[GameData.exportMissionTypes[nodeInfo.GetProperty("missionType").ToString()].GetProperty("name").ToString()].ToLower());
+				var missionType = culture.ToTitleCase(GameData.lang[GameData.exportMissionTypes[nodeInfo.MissionType]].ToLower());
 				var fissure = new VoidFissure {
 					Id = mission.GetProperty("_id").GetProperty("$oid").ToString(),
 					Modifier = modifier,
-					Node = GameData.lang[nodeInfo.GetProperty("name").ToString()],
+					Node = GameData.lang[nodeInfo.Name],
 					IsHard = baseLvl == 100,
 					Tier = GameData.relicType.TryGetValue(modifier, out (string, string) value1) ? value1.Item1 : "Unknown",
 					Color = GameData.relicType.TryGetValue(modifier, out (string, string) value) ? value.Item2 : "#FFFFFF",
 					Expiry = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime,
-					Planet = GameData.lang[nodeInfo.GetProperty("systemName").ToString()],
-					Faction = GameData.lang[GameData.exportFactions[nodeInfo.GetProperty("faction").ToString()].GetProperty("name").ToString()],
+					Planet = GameData.lang[nodeInfo.SystemName],
+					Faction = GameData.lang[GameData.exportFactions[nodeInfo.Faction]],
 					MissionType = missionType,
-					MinLevel = nodeInfo.GetProperty("minEnemyLevel").GetInt32() + baseLvl + 5,
-					MaxLevel = nodeInfo.GetProperty("maxEnemyLevel").GetInt32() + baseLvl + 5
+					MinLevel = nodeInfo.MinEnemyLevel + baseLvl + 5,
+					MaxLevel = nodeInfo.MaxEnemyLevel + baseLvl + 5
 				};
 
 				GameData.fissures.Add(fissure);

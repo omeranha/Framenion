@@ -26,13 +26,13 @@ public partial class FissuresAlert : Window
 		var culture = new CultureInfo("en-US", false).TextInfo;
 		var missionNames = GameData.exportMissionTypes.Values.Select(el => {
 			try {
-				string nameKey = el.TryGetProperty("name", out var nameProp) ? nameProp.ToString() : string.Empty;
+				string nameKey = el;
 				return GameData.lang.TryGetValue(nameKey, out var v) ? culture.ToTitleCase(v.ToLower()) : nameKey;
 			} catch { return string.Empty; }
 		}).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList();
 		var planetNames = GameData.exportRegions.Values.Select(el => {
 			try {
-				var systemName = el.TryGetProperty("systemName", out var sysProp) ? sysProp.ToString() : string.Empty;
+				var systemName = el.SystemName;
 				return GameData.lang.TryGetValue(systemName, out var v) ? v : systemName;
 			} catch { return string.Empty; }
 		}).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).OrderBy(s => s).ToList();

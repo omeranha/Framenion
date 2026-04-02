@@ -1,5 +1,4 @@
 ﻿using Avalonia.Media.Imaging;
-using System;
 using System.Collections.ObjectModel;
 using System.IO;
 
@@ -9,7 +8,7 @@ public class Item(string name, string type, ObservableCollection<RecipeIngredien
 {
 	public string Name { get; set; } = name;
 	public string Type { get; set; } = type;
-	public Bitmap? Icon { get; } = File.Exists(iconPath) ? GameData.DecodeThumbnail(iconPath) : null;
+	public Bitmap? Icon { get; } = File.Exists(iconPath) ? GameData.GetOrCreateBitmap(iconPath) : null;
 	public ObservableCollection<RecipeIngredient> Ingredients { get; set; } = ingredients;
 	public string Category { get; set; } = category;
 	public string BorderColor { get; set; } = "#4A4A4A";
@@ -27,5 +26,5 @@ public class RecipeIngredient(string name, string type, int count, string iconPa
 	public string BackgroundColor => OwnedCount >= Count ? "#207a35" : "#252525";
 	public string BorderColor { get; set; } = "#4A4A4A";
 	public bool IsCountVisible => OwnedCount > 0;
-	public Bitmap? Icon { get; set; } = File.Exists(iconPath)? GameData.DecodeThumbnail(iconPath) : null;
+	public Bitmap? Icon { get; set; } = File.Exists(iconPath)? GameData.GetOrCreateBitmap(iconPath) : null;
 }
