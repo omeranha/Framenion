@@ -12,6 +12,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -72,13 +73,13 @@ public static class GameData
 
 	private static readonly ConcurrentDictionary<string, Lazy<Bitmap?>> bitmapCache = new(StringComparer.Ordinal);
 
-	public static async Task<FrozenDictionary<string, T>> Deserialize<T>(string path)
+	public static async Task<FrozenDictionary<string, T>> Deserialize<T>(string path, JsonTypeInfo<T> typeInfo)
 	{
 		await using var stream = File.OpenRead(path);
 		using var doc = await JsonDocument.ParseAsync(stream);
 		var builder = new Dictionary<string, T>(StringComparer.Ordinal);
 		foreach (var element in doc.RootElement.EnumerateObject()) {
-			var item = JsonSerializer.Deserialize<T>(element.Value.GetRawText());
+			var item = JsonSerializer.Deserialize<T>(element.Value, typeInfo);
 			if (item != null) {
 				builder[element.Name] = item;
 			}
@@ -239,13 +240,13 @@ public static class GameData
 						break;
 					}
 				case "ExportWarframes":
-					exportWarframes = await Deserialize<ItemDTO>(exportCacheFile);
+					exportWarframes = await Deserialize(exportCacheFile, ExportJsonContext.Default.ItemDTO);
 					break;
 				case "ExportWeapons":
-					exportWeapons = await Deserialize<ItemDTO>(exportCacheFile);
+					exportWeapons = await Deserialize(exportCacheFile, ExportJsonContext.Default.ItemDTO);
 					break;
 				case "ExportSentinels":
-					exportSentinels = await Deserialize<ItemDTO>(exportCacheFile);
+					exportSentinels = await Deserialize(exportCacheFile, ExportJsonContext.Default.ItemDTO);
 					break;
 				case "ExportRecipes": {
 						await using var stream = File.OpenRead(exportCacheFile);
@@ -254,7 +255,7 @@ public static class GameData
 
 						foreach (var r in doc.RootElement.EnumerateObject()) {
 							if (r.Value.TryGetProperty("resultType", out var rt) && rt.GetString() is string rtStr) {
-								var recipe = JsonSerializer.Deserialize<RecipeDTO>(r.Value);
+								var recipe = JsonSerializer.Deserialize(r.Value, ExportJsonContext.Default.RecipeDTO);
 								if (recipe == null) continue;
 								builder[rtStr] = (r.Name, recipe);
 							}
@@ -263,10 +264,10 @@ public static class GameData
 						break;
 					}
 				case "ExportRegions":
-					exportRegions = await Deserialize<RegionDTO>(exportCacheFile);
+					exportRegions = await Deserialize(exportCacheFile, ExportJsonContext.Default.RegionDTO);
 					break;
 				case "ExportResources":
-					exportResources = await Deserialize<ResourceDTO>(exportCacheFile);
+					exportResources = await Deserialize(exportCacheFile, ExportJsonContext.Default.ResourceDTO);
 					break;
 				case "ExportMissionTypes": {
 						using var stream = File.OpenRead(exportCacheFile);
