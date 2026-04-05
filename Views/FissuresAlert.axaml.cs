@@ -21,8 +21,8 @@ public partial class FissuresAlert : Window
 	public FissuresAlert()
 	{
 		InitializeComponent();
-		this.DataContext = this;
-		this.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+		DataContext = this;
+		WindowStartupLocation = WindowStartupLocation.CenterOwner;
 		var culture = new CultureInfo("en-US", false).TextInfo;
 		var missionNames = GameData.exportMissionTypes.Values.Select(el => {
 			try {
@@ -92,9 +92,9 @@ public partial class FissuresAlert : Window
 			}
 			writer.WriteEndArray();
 			writer.Flush();
-			ToastWindow.ShowToast(this, "Fissure Alert List", "Saved", TimeSpan.FromSeconds(3), ToastAnchor.TopRightOfOwnerWindow);
+			ToastWindow.ShowToast("Fissure Alert List", "Saved", TimeSpan.FromSeconds(3), ToastAnchor.TopRightOfOwnerWindow);
 		} catch (Exception ex) {
-			MessageBox.Show(this, "Error", "Failed to save filters: " + ex.Message);
+			MessageBox.Show("Error", "Failed to save filters: " + ex.Message);
 		}
 	}
 

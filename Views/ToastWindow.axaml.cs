@@ -1,13 +1,13 @@
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Controls;
-using Avalonia.Input;
-using Avalonia.Interactivity;
-using Avalonia.Styling;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
+using Avalonia.Styling;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace framenion;
@@ -22,7 +22,7 @@ public enum ToastAnchor
 
 public partial class ToastWindow : Window
 {
-	private static readonly object gate = new();
+	private static readonly Lock gate = new();
 	private static readonly List<ToastWindow> active = [];
 	private static int defaultMargin = 12;
 	private static int defaultSpacing = 10;
@@ -47,17 +47,22 @@ public partial class ToastWindow : Window
 		Closed += (_, _) => OnToastClosed(this);
 	}
 
-	public static void ShowToast(Window owner, string title, string body, TimeSpan? duration = null, ToastAnchor anchor = ToastAnchor.BottomRightOfScreen,
+	public static void ShowToast(string title, string body, TimeSpan? duration = null, ToastAnchor anchor = ToastAnchor.BottomRightOfScreen,
 		int margin = 12,
 		int spacing = 10)
 	{
+		var owner = GetOwnerWindow();
+		if (owner == null) return;
+
 		duration ??= TimeSpan.FromSeconds(6);
 		defaultMargin = margin;
 		defaultSpacing = spacing;
 
 		var toastOwner = NormalizeToastOwner(owner, anchor);
-		var toast = new ToastWindow { Topmost = true };
-		toast.Owner = owner;
+		var toast = new ToastWindow {
+			Topmost = true,
+			Owner = owner
+		};
 		toast.TitleText.Text = title;
 		toast.BodyText.Text = body;
 		toast.anchor = anchor;
@@ -76,10 +81,10 @@ public partial class ToastWindow : Window
 		};
 
 		toast.Show(toastOwner);
-		_ = AutoCloseAsync(toastOwner, toast, duration.Value);
+		_ = AutoCloseAsync(toast, duration.Value);
 	}
 
-	private static async Task AutoCloseAsync(Window owner, ToastWindow toast, TimeSpan duration)
+	private static async Task AutoCloseAsync(ToastWindow toast, TimeSpan duration)
 	{
 		await Task.Delay(duration);
 		if (!toast.IsVisible) return;
@@ -189,5 +194,19 @@ public partial class ToastWindow : Window
 		}
 
 		return root;
+	}
+
+	private static Window? GetOwnerWindow()
+	{
+		if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+			return null;
+
+		var windows = desktop.Windows;
+		foreach (var w in windows) {
+			if (w.IsActive)
+				return w;
+		}
+
+		return desktop.MainWindow ?? (windows.Count > 0 ? windows[0] : null);
 	}
 }

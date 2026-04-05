@@ -13,7 +13,7 @@ public partial class SettingsWindow : Window
 	public SettingsWindow()
 	{
 		InitializeComponent();
-		this.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+		WindowStartupLocation = WindowStartupLocation.CenterOwner;
 		Opened += async (_, _) => await LoadAsync();
 	}
 
@@ -51,13 +51,13 @@ public partial class SettingsWindow : Window
 		try {
 			await settings.SaveAsync();
 			if (settings.EnableEELogRead) {
-				GameData.logPollTimer.Start();
+				GameData.monitor?.Start();
 			} else {
-				GameData.logPollTimer.Stop();
+				GameData.monitor?.Stop();
 			}
-			ToastWindow.ShowToast(this, "Settings", "Settings saved successfully.", TimeSpan.FromSeconds(3), ToastAnchor.TopRightOfOwnerWindow);
+			ToastWindow.ShowToast("Settings", "Settings saved successfully.", TimeSpan.FromSeconds(3), ToastAnchor.TopRightOfOwnerWindow);
 		} catch (Exception ex) {
-			MessageBox.Show(this, "Error", $"Failed to save settings: {ex.Message}");
+			MessageBox.Show("Error", $"Failed to save settings: {ex.Message}");
 		}
 	}
 

@@ -1,5 +1,4 @@
 using Avalonia;
-using Avalonia.Controls;
 using Avalonia.Media;
 using System;
 using System.ComponentModel;
@@ -65,7 +64,7 @@ public class VoidFissure : INotifyPropertyChanged
 
 	public void UpdateTimeRemaining() => OnPropertyChanged("TimeRemaining");
 
-	public static async Task LoadVoidFissures(Window window)
+	public static async Task LoadVoidFissures()
 	{
 		try {
 			using var response = await GameData.httpClient.GetAsync("https://api.warframe.com/cdn/worldState.php",HttpCompletionOption.ResponseHeadersRead);
@@ -88,7 +87,7 @@ public class VoidFissure : INotifyPropertyChanged
 					Modifier = modifier,
 					Node = GameData.lang[nodeInfo.Name],
 					IsHard = baseLvl == 100,
-					Tier = GameData.relicType.TryGetValue(modifier, out (string, string) value1) ? value1.Item1 : "Unknown",
+					Tier = GameData.relicType.TryGetValue(modifier, out (string, string) value1) ? value1.Item1 : modifier,
 					Color = GameData.relicType.TryGetValue(modifier, out (string, string) value) ? value.Item2 : "#FFFFFF",
 					Expiry = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime,
 					Planet = GameData.lang[nodeInfo.SystemName],
@@ -101,7 +100,20 @@ public class VoidFissure : INotifyPropertyChanged
 				GameData.fissures.Add(fissure);
 			}
 		} catch (Exception ex) {
-			MessageBox.Show(window, "Error", "Could not load Void Fissures: " + ex.Message);
+			MessageBox.Show("Error", "Could not load Void Fissures: " + ex.Message);
 		}
+	}
+
+	public static int GetTierSortKey(string voidTier)
+	{
+		return voidTier switch {
+			"Lith" => 1,
+			"Meso" => 2,
+			"Neo" => 3,
+			"Axi" => 4,
+			"Requiem" => 5,
+			"Omnia" => 6,
+			_ => int.MaxValue
+		};
 	}
 }

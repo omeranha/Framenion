@@ -6,7 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace framenion.Src;
 
@@ -26,11 +26,35 @@ public class RelicRewardOCR
 	private const int rewardsY = 316;
 	private const int itemNameHeight = 48;
 
-	public static List<Reward> ReadRewards(Mat screenshot, PaddleOcrAll? engine)
+	public static void ReadRelicWindow()
+	{
+		if (!GameData.appSettings.EnableRelicOverlay) return;
+
+		_ = Task.Run(async () => {
+			try {
+				await Task.Delay(500);
+				using var screenshot = ScreenCapture.Capture();
+				var rewards = ReadRewards(screenshot);
+				if (rewards.Count == 0) {
+					ToastWindow.ShowToast("No rewards detected", "Could not detect any relic rewards.", TimeSpan.FromSeconds(5));
+					return;
+				}
+				var rewardInfoTasks = rewards.Select(r => GameData.GetItemData(r.ItemName)).ToArray();
+				var rewardInfos = await Task.WhenAll(rewardInfoTasks);
+
+				var displayTasks = rewards.Zip(rewardInfos, (reward, info) => RelicRewardWindow.Display(info, reward.Rect.X, reward.Rect.Y + GameData.appSettings.OverlayOffset, reward.Rect.Width, TimeSpan.FromSeconds(10)));
+				await Task.WhenAll(displayTasks);
+			} catch (Exception ex) {
+				MessageBox.Show("Error", $"Failed to read rewards: {ex.Message}");
+			}
+		});
+	}
+
+	private static List<Reward> ReadRewards(Mat screenshot)
 	{
 		var rewards = new List<Reward>();
 
-		if (!OperatingSystem.IsWindows() || engine == null) return rewards;
+		if (!OperatingSystem.IsWindows() || GameData.paddleEngine == null) return rewards;
 
 		double uiScale = GameData.appSettings.UIScale / 100.0;
 		int mostWidth = (int)(rewardsWidth * uiScale);
@@ -45,7 +69,7 @@ public class RelicRewardOCR
 			Cv2.ImWrite(Path.Combine(GameData.appDataDir, "debug_itemnames.png"), cropped);
 		}
 
-		var itemNames = engine.Run(cropped);
+		var itemNames = GameData.paddleEngine.Run(cropped);
 		float xThreshold = 200f;
 		var words = itemNames.Regions.Where(r => !string.IsNullOrWhiteSpace(r.Text))
 			.Select(r => (region: r, x1: r.Rect.Center.X)).OrderBy(t => t.x1).ToList();
@@ -68,16 +92,15 @@ public class RelicRewardOCR
 		}
 
 		foreach (var col in columns) {
-			var validWords = col.Where(r => r.Text.Length >= 2 || r.Text == "&").ToList();
-			if (validWords.Count == 0) continue;
+			if (col.Count == 0) continue;
 
-			var itemName = string.Join(" ", validWords.Select(r => NormalizeItemName(r.Text))).Trim();
+			var itemName = string.Join(" ", col.Select(r => NormalizeItemName(r.Text))).Trim();
 			if (string.IsNullOrEmpty(itemName) || itemName.Contains("Forma") || itemName.Contains("Riven") || itemName.Contains("Star")) continue;
 
 			itemName = LevenshteinItemName(itemName);
 			if (itemName == null) continue;
 
-			var rects = validWords.Select(r => r.Rect.BoundingRect()).ToList();
+			var rects = col.Select(r => r.Rect.BoundingRect()).ToList();
 			int left = rects.Min(r => r.X); // leftmost edge of first word
 			int right = rects.Max(r => r.X + r.Width); // rightmost edge of last word
 			int bottom = rects.Max(r => r.Y + r.Height); // bottom edge of the lowest word in the column
@@ -93,7 +116,7 @@ public class RelicRewardOCR
 		return rewards;
 	}
 
-	public static string NormalizeItemName(string text)
+	private static string NormalizeItemName(string text)
 	{
 		if (string.IsNullOrEmpty(text))
 			return text;

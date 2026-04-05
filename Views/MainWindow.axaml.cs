@@ -1,4 +1,3 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
@@ -11,7 +10,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Linq;
@@ -37,18 +35,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	private static readonly string notifiedFissuresFile = Path.Combine(GameData.appDataDir, "notified_fissures.txt");
 
 	private readonly HashSet<string> notifiedFissures = [];
-
 	private IReadOnlyList<FissureAlertEntry> loadedFissureAlertList = [];
 
-	private CancellationTokenSource? searchDebounce;
-	private long lastPosition = 0;
-	private bool lastWfRunning = false;
+	public static DispatcherTimer fissureRefreshTimer = new() { Interval = TimeSpan.FromMinutes(1) };
+	public static DispatcherTimer fissureUpdateTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+
+	private CancellationTokenSource searchDebounce = new();
 
 	private double itemsZoom = 1.0;
 	private const double ItemsZoomMin = 0.50;
 	private const double ItemsZoomMax = 2.00;
 	private const double ItemsZoomStep = 0.10;
-	
 	public double ItemsTileWidth => Math.Round(200 * itemsZoom);
 	public double ItemsTileMinHeight => Math.Round(220 * itemsZoom);
 
@@ -82,20 +79,40 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		DataContext = this;
 		ItemsList.ItemsSource = displayedItems;
 		FissuresList.ItemsSource = displayedFissures;
+
+		GameData.monitor?.OnProcessStateChanged += running => {
+			Dispatcher.UIThread.Post(() => {
+				if (running) {
+					WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "check_d.png"));
+					if (GameData.appSettings.EnableEELogRead) {
+						GameData.monitor.Start();
+					}
+					ToolTip.SetTip(WarframeOpened, "Warframe is up and running.");
+				} else {
+					WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "uncheck_d.png"));
+					ToolTip.SetTip(WarframeOpened, "Warframe is closed");
+					GameData.monitor.Stop();
+				}
+			});
+		};
+
+		GameData.monitor?.OnRewardDetected += () => {
+			RelicRewardOCR.ReadRelicWindow();
+		};
 	}
 
 	protected override void OnClosed(EventArgs e)
 	{
 		base.OnClosed(e);
 		keyboardHook.Unhook();
-		GameData.fissureRefreshTimer?.Stop();
-		GameData.fissureUpdateTimer?.Stop();
-		GameData.logPollTimer?.Stop();
+		fissureRefreshTimer?.Stop();
+		fissureUpdateTimer?.Stop();
 		if (GameData.paddleEngine is IDisposable disposableEngine) {
 			disposableEngine.Dispose();
 		}
 		searchDebounce?.Cancel();
 		searchDebounce?.Dispose();
+		GameData.monitor?.Dispose();
 	}
 
 	private async Task InitializeAsync()
@@ -106,40 +123,27 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			await LoadNotifiedFissures();
 			loadedFissureAlertList = FissureAlertList.Load();
 
-			GameData.fissureRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
-			GameData.fissureRefreshTimer.Tick += async (_, _) => {
-				await VoidFissure.LoadVoidFissures(this);
+			fissureRefreshTimer.Tick += async (_, _) => {
+				await VoidFissure.LoadVoidFissures();
 				await RefreshFissuresList();
 			};
-			GameData.fissureUpdateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-			GameData.fissureUpdateTimer.Tick += (_, _) => UpdateFissureTimers();
-			GameData.fissureUpdateTimer.Start();
-			GameData.fissureRefreshTimer.Start();
-
-			GameData.logPollTimer.Tick += (_, _) => ReadEELog();
-			if (GameData.appSettings.EnableEELogRead) {
-				GameData.logPollTimer.Start();
-			}
+			fissureUpdateTimer.Tick += (_, _) => UpdateFissureTimers();
+			fissureUpdateTimer.Start();
+			fissureRefreshTimer.Start();
 
 			FullOcrModel model = await OnlineFullModels.EnglishV4.DownloadAsync();
-			GameData.paddleEngine = new(model, PaddleDevice.PlatformDefault) {
+			GameData.paddleEngine = new(model, PaddleDevice.Onnx()) {
 				AllowRotateDetection = false,
 				Enable180Classification = false,
 			};
 			await InitializeDataInBackgroundAsync();
 		} catch (Exception ex) {
-			MessageBox.Show(this, "Error", "Failed to initialize application: " + ex.Message);
+			MessageBox.Show("Error", "Failed to initialize application: " + ex.Message);
 		} finally {
 			IsLoading = false;
 			keyboardHook.KeyEvent += key => {
 				if (key == Avalonia.Input.Key.PrintScreen) {
-					Dispatcher.UIThread.Post(() => {
-						try {
-							ReadRelicWindow(false);
-						} catch (Exception ex) {
-							MessageBox.Show(this, "Error", $"Failed to read rewards: {ex.Message}");
-						}
-					});
+					RelicRewardOCR.ReadRelicWindow();
 				}
 			};
 			keyboardHook.Hook();
@@ -163,25 +167,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			bool needsUpdate = !string.IsNullOrEmpty(latestHash) && !string.Equals(localHash.Trim(), latestHash, StringComparison.Ordinal);
 			if (needsUpdate) {
 				await File.WriteAllTextAsync(hashPath, latestHash);
-				ToastWindow.ShowToast(this, "Data initialization", "A new update has been found, updating cache");
+				ToastWindow.ShowToast("Data initialization", "A new update has been found, updating cache");
 			}
 
 			string[] firstLoad = ["dict.en", "ExportRegions", "ExportMissionTypes", "ExportFactions"];
-			var loadTasks = firstLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir, needsUpdate));
+			var loadTasks = firstLoad.Select(f => GameData.LoadFile(f, GameData.cacheDir, needsUpdate));
 			await Task.WhenAll(loadTasks);
 			await Dispatcher.UIThread.InvokeAsync(async () => {
-				await VoidFissure.LoadVoidFissures(this);
+				await VoidFissure.LoadVoidFissures();
 				await RefreshFissuresList();
 			});
 			string[] secondLoad = ["ExportWarframes", "ExportRecipes", "ExportWeapons", "ExportResources", "ExportMisc", "ExportSentinels", "ExportTextIcons"];
-			loadTasks = secondLoad.Select(f => GameData.LoadFile(this, f, GameData.cacheDir, needsUpdate));
+			loadTasks = secondLoad.Select(f => GameData.LoadFile(f, GameData.cacheDir, needsUpdate));
 			await Task.WhenAll(loadTasks);
-			await GameData.LoadWFMarketData(this, needsUpdate);
+			await GameData.LoadWFMarketData(needsUpdate);
 
-			await GameData.LoadExports(this);
+			await GameData.LoadExports();
 			await ParseInfo();
 		} catch (Exception e) {
-			MessageBox.Show(this, "Error", "Failed to initialize data in background: " + e.Message);
+			MessageBox.Show("Error", "Failed to initialize data in background: " + e.Message);
 		}
 	}
 
@@ -419,15 +423,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	private async Task RefreshFissuresList()
 	{
 		displayedFissures.Clear();
-		var ordered = GameData.fissures
-			.OrderBy(f => GameData.GetTierSortKey(f.Tier))
-			.ThenBy(f => f.MissionType)
-			.ToList();
+		var ordered = GameData.fissures.Select(f => {
+			f.ShouldNotify = FissureAlertList.MatchesAny(f, loadedFissureAlertList);
+			return f;
+		}).OrderByDescending(f => f.ShouldNotify)
+		.ThenBy(f => VoidFissure.GetTierSortKey(f.Tier)).ToList();
 
 		var matches = new List<VoidFissure>();
 		foreach (var fissure in ordered) {
-			fissure.ShouldNotify = FissureAlertList.MatchesAny(fissure, loadedFissureAlertList);
-
 			if (fissure.ShouldNotify && !notifiedFissures.Contains(fissure.Id)) {
 				notifiedFissures.Add(fissure.Id);
 				matches.Add(fissure);
@@ -452,7 +455,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			? $"{(matches[0].IsHard ? "Steel Path" : "Normal")} {matches[0].MissionType} {matches[0].Tier} ends in {matches[0].TimeRemaining}"
 			: string.Join(Environment.NewLine, matches.Select(f => $"{(f.IsHard ? "Steel Path" : "Normal")} {f.MissionType} {f.Tier} ends in {f.TimeRemaining}"));
 
-		ToastWindow.ShowToast(this, title, body, TimeSpan.FromSeconds(8));
+		ToastWindow.ShowToast(title, body, TimeSpan.FromSeconds(8));
 	}
 
 	private async Task LoadNotifiedFissures()
@@ -468,7 +471,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 				}
 			}
 		} catch {
-			MessageBox.Show(this, "Error", "Failed to load seen fissures list.");
+			MessageBox.Show("Error", "Failed to load seen fissures list.");
 		}
 	}
 
@@ -478,109 +481,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			var lines = notifiedFissures.OrderBy(x => x, StringComparer.Ordinal).ToArray();
 			await File.WriteAllLinesAsync(notifiedFissuresFile, lines);
 		} catch {
-			MessageBox.Show(this, "Error", "Failed to save seen fissures list.");
-		}
-	}
-
-	private void ReadRelicWindow(bool auto)
-	{
-		if (!GameData.appSettings.EnableRelicOverlay) return;
-
-		_ = Task.Run(async () => {
-			try {
-				if (auto) {
-					await Task.Delay(2000);
-				}
-				var screenshot = ScreenCapture.Capture();
-				var rewards = RelicRewardOCR.ReadRewards(screenshot, GameData.paddleEngine);
-				if (rewards.Count == 0) {
-					ToastWindow.ShowToast(this, "No rewards detected", "Could not detect any relic rewards.", TimeSpan.FromSeconds(5));
-					return;
-				}
-				var rewardInfoTasks = rewards.Select(r => GetItemData(r.ItemName)).ToArray();
-				var rewardInfos = await Task.WhenAll(rewardInfoTasks);
-
-				var displayTasks = rewards.Zip(rewardInfos, (reward, info) => RelicRewardWindow.Display(this, info, reward.Rect.X, reward.Rect.Y + GameData.appSettings.OverlayOffset, reward.Rect.Width, TimeSpan.FromSeconds(10)));
-				await Task.WhenAll(displayTasks);
-			} catch (Exception ex) {
-				MessageBox.Show(this, "Error", $"Failed to read rewards: {ex.Message}");
-			}
-		});
-	}
-
-	private async Task<RewardInfo> GetItemData(string itemName)
-	{
-		GameData.warframeMarketItems.TryGetValue(itemName, out var marketInfo);
-		var rewardInfo = new RewardInfo(itemName);
-		try {
-			if (!string.IsNullOrEmpty(marketInfo.slug)) {
-				rewardInfo.Ducats = marketInfo.ducats;
-				var resp = await GameData.httpClient.GetAsync($"https://api.warframe.market/v2/orders/item/{marketInfo.slug}/top");
-				resp.EnsureSuccessStatusCode();
-				using var stream = await resp.Content.ReadAsStreamAsync();
-				using var doc = await JsonDocument.ParseAsync(stream);
-
-				if (doc.RootElement.TryGetProperty("data", out var data) && data.TryGetProperty("sell", out var sell) &&
-					sell.ValueKind == JsonValueKind.Array && sell.GetArrayLength() > 0) {
-					var first = sell[0];
-					if (first.TryGetProperty("platinum", out var platinumProp)) {
-						rewardInfo.Platinum = platinumProp.GetInt32().ToString();
-					}
-				}
-			}
-		} catch {
-			MessageBox.Show(this, "Error", "Failed to fetch market data for " + itemName);
-		}
-
-		return rewardInfo;
-	}
-
-	private void ReadEELog()
-	{
-		if (!File.Exists(EElog)) return;
-
-		var process = Process.GetProcessesByName("Warframe.x64").FirstOrDefault();
-		bool wfRunning = process != null;
-		if (lastWfRunning != wfRunning) {
-			lastWfRunning = wfRunning;
-			Dispatcher.UIThread.Post(() => {
-				if (wfRunning) {
-					WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "check_d.png"));
-					ToolTip.SetTip(WarframeOpened, "Warframe is up and running\nReading log data.");
-				} else {
-					WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "uncheck_d.png"));
-					ToolTip.SetTip(WarframeOpened, "Warframe is closed\nNot reading log data.");
-				}
-			});
-		}
-
-		if (!wfRunning) return;
-
-		var fileInfo = new FileInfo(EElog);
-		long fileLength = fileInfo.Length;
-		if (lastPosition > fileLength) lastPosition = 0;
-		if (lastPosition == 0 && fileLength > 0) {
-			lastPosition = fileLength;
-			return;
-		}
-
-		if (fileLength > lastPosition) {
-			using var fs = new FileStream(EElog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-			using var mmf = MemoryMappedFile.CreateFromFile(fs, null, 0, MemoryMappedFileAccess.Read, HandleInheritability.None, false);
-			using var accessor = mmf.CreateViewAccessor(lastPosition, fileLength - lastPosition, MemoryMappedFileAccess.Read);
-
-			byte[] bytes = new byte[fileLength - lastPosition];
-			accessor.ReadArray(0, bytes, 0, bytes.Length);
-
-			string text = Encoding.UTF8.GetString(bytes);
-			using var reader = new StringReader(text);
-			string? line;
-			while ((line = reader.ReadLine()) != null) {
-				if (!line.Contains("Got rewards")) continue;
-
-				ReadRelicWindow(true);
-			}
-			lastPosition = fileLength;
+			MessageBox.Show("Error", "Failed to save seen fissures list.");
 		}
 	}
 
@@ -650,13 +551,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 	private async void OnRefreshFissuresClick(object? sender, RoutedEventArgs e)
 	{
-		await VoidFissure.LoadVoidFissures(this);
+		await VoidFissure.LoadVoidFissures();
 		await RefreshFissuresList();
 	}
 
 	private async void OnRefreshInfoClickAsync(object? sender, RoutedEventArgs e)
 	{
-		await GameData.ExtractGameInfo(this);
+		await GameData.ExtractGameInfo();
 		await ParseInfo();
 	}
 
@@ -668,7 +569,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			loadedFissureAlertList = FissureAlertList.Load();
 			await RefreshFissuresList();
 		} catch (Exception ex) {
-			MessageBox.Show(this, "Error", "Failed to open Fissures Alert Settings: " + ex.Message);
+			MessageBox.Show("Error", "Failed to open Fissures Alert Settings: " + ex.Message);
 		}
 	}
 
@@ -678,7 +579,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			var w = new SettingsWindow();
 			await w.ShowDialog(this);
 		} catch (Exception ex) {
-			MessageBox.Show(this, "Error", "Failed to open Settings: " + ex.Message);
+			MessageBox.Show("Error", "Failed to open Settings: " + ex.Message);
 		}
 	}
 

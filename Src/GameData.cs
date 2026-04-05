@@ -1,6 +1,4 @@
-﻿using Avalonia.Controls;
-using Avalonia.Media.Imaging;
-using Avalonia.Threading;
+﻿using Avalonia.Media.Imaging;
 using Sdcb.PaddleOCR;
 using System;
 using System.Collections.Concurrent;
@@ -38,11 +36,13 @@ public static class GameData
 	public static readonly string appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Framenion");
 	public static readonly string cacheDir = Path.Combine(appDataDir, "cache");
 	public static readonly string iconsCacheDir = Path.Combine(cacheDir, "icons");
+
 	private static readonly SemaphoreSlim iconDownloadSemaphore = new(10, 10);
 	public static readonly HttpClient httpClient = new() {
 		BaseAddress = new Uri("https://browse.wf/"),
 	};
 	public static PaddleOcrAll? paddleEngine;
+	public static WarframeMonitor? monitor = new();
 
 	public static JsonElement mainRoot = new();
 
@@ -64,10 +64,6 @@ public static class GameData
 
 	public static List<string> uniquelevelCaps = [];
 	public static List<string> primeItems = [];
-
-	public static DispatcherTimer? fissureRefreshTimer;
-	public static DispatcherTimer? fissureUpdateTimer;
-	public static DispatcherTimer logPollTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
 
 	public static AppSettings appSettings = new();
 
@@ -98,7 +94,7 @@ public static class GameData
 				} catch {
 					return null;
 				}
-			}, System.Threading.LazyThreadSafetyMode.ExecutionAndPublication));
+			}, LazyThreadSafetyMode.ExecutionAndPublication));
 		return lazy.Value;
 	}
 
@@ -150,7 +146,7 @@ public static class GameData
 		}));
 	}
 
-	public static async Task LoadWFMarketData(Window window, bool updateFile)
+	public static async Task LoadWFMarketData(bool updateFile)
 	{
 		var cacheFile = Path.Combine(cacheDir, "wfmarketitems.json");
 		try {
@@ -185,11 +181,11 @@ public static class GameData
 
 			warframeMarketItems = builder.ToFrozenDictionary(StringComparer.Ordinal);
 		} catch (Exception ex) {
-			MessageBox.Show(window, "Error", "Failed to load Warframe Market items: " + ex.Message);
+			MessageBox.Show("Error", "Failed to load Warframe Market items: " + ex.Message);
 		}
 	}
 
-	public static async Task LoadFile(Window window, string file, string cacheDir, bool updateFile)
+	public static async Task LoadFile(string file, string cacheDir, bool updateFile)
 	{
 		var exportCacheFile = Path.Combine(cacheDir, file + ".json");
 		if (!File.Exists(exportCacheFile) || updateFile) {
@@ -315,7 +311,7 @@ public static class GameData
 					}
 			}
 		} catch (Exception ex) {
-			MessageBox.Show(window, "Error", $"Error loading {file}: {ex.Message}");
+			MessageBox.Show("Error", $"Error loading {file}: {ex.Message}");
 		}
 	}
 
@@ -371,7 +367,7 @@ public static class GameData
 		return partType != "LWPT_MOA_HEAD" && partType != "LWPT_ZANUKA_HEAD" && partType != "LWPT_HB_DECK" && partType != "LWPT_BLADE" && partType != "LWPT_AMP_OCULUS";
 	}
 
-	public static async Task LoadExports(Window window)
+	public static async Task LoadExports()
 	{
 		string blueprintPath = Path.Combine(AppContext.BaseDirectory, "assets", "blueprint.png");
 		try {
@@ -408,26 +404,18 @@ public static class GameData
 				itemsList.Add(new Item(name, type, BuildIngredients(name, type, blueprintPath), "Companions", GetLocalIconPath(sentinel.Icon), false));
 			}
 		} catch (Exception ex) {
-			MessageBox.Show(window, "Error", "Failed to load exports: " + ex.Message);
+			MessageBox.Show("Error", "Failed to load exports: " + ex.Message);
 		}
 	}
 
-	public static int GetTierSortKey(string voidTier)
-	{
-		if (voidTier.StartsWith("VoidT", StringComparison.Ordinal) && int.TryParse(voidTier.AsSpan("VoidT".Length), out var n)) {
-			return n;
-		}
-		return 0;
-	}
-
-	public static async Task ExtractGameInfo(Window window)
+	public static async Task ExtractGameInfo()
 	{
 		Directory.CreateDirectory(GameData.appDataDir);
 		bool isWindows = OperatingSystem.IsWindows();
 		var exeFileName = isWindows ? "warframe-api-helper.exe" : "warframe-api-helper";
 		var exePath = Path.Combine(GameData.appDataDir, exeFileName);
 		if (!File.Exists(exePath)) {
-			if (!await MessageBox.AskYesNo(window, "Download required component", "Do you want to download warframe-api-helper from its official GitHub repository?")) {
+			if (!await MessageBox.AskYesNo("Download required component", "Do you want to download warframe-api-helper from its official GitHub repository?")) {
 				return;
 			}
 
@@ -476,13 +464,13 @@ public static class GameData
 				}
 			} catch (Exception ex) {
 				try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-				MessageBox.Show(window, "Error", "Failed to download component: " + ex.Message);
+				MessageBox.Show("Error", "Failed to download component: " + ex.Message);
 				return;
 			}
 		}
 
-		if (!await MessageBox.AskYesNo(window, "Disclaimer", "By confirming, you acknowledge and agree to use warframe-api-helper to retrieve your inventory data at your own risk.", "Confirm", "Close")) {
-			MessageBox.Show(window, "Info", "Operation cancelled by user.");
+		if (!await MessageBox.AskYesNo("Disclaimer", "By confirming, you acknowledge and agree to use warframe-api-helper to retrieve your inventory data at your own risk.", "Confirm", "Close")) {
+			MessageBox.Show("Info", "Operation cancelled by user.");
 			return;
 		}
 
@@ -512,8 +500,35 @@ public static class GameData
 		var stderr = await stderrTask;
 		if (process.ExitCode != 0) {
 			var msg = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr + Environment.NewLine + stdout;
-			MessageBox.Show(window, "warframe-api-helper error", msg);
+			MessageBox.Show("warframe-api-helper error", msg);
 			return;
 		}
+	}
+
+	public static async Task<RewardInfo> GetItemData(string itemName)
+	{
+		warframeMarketItems.TryGetValue(itemName, out var marketInfo);
+		var rewardInfo = new RewardInfo(itemName);
+		try {
+			if (!string.IsNullOrEmpty(marketInfo.slug)) {
+				rewardInfo.Ducats = marketInfo.ducats;
+				var resp = await httpClient.GetAsync($"https://api.warframe.market/v2/orders/item/{marketInfo.slug}/top");
+				resp.EnsureSuccessStatusCode();
+				using var stream = await resp.Content.ReadAsStreamAsync();
+				using var doc = await JsonDocument.ParseAsync(stream);
+
+				if (doc.RootElement.TryGetProperty("data", out var data) && data.TryGetProperty("sell", out var sell) &&
+					sell.ValueKind == JsonValueKind.Array && sell.GetArrayLength() > 0) {
+					var first = sell[0];
+					if (first.TryGetProperty("platinum", out var platinumProp)) {
+						rewardInfo.Platinum = platinumProp.GetInt32().ToString();
+					}
+				}
+			}
+		} catch {
+			MessageBox.Show("Error", "Failed to fetch market data for " + itemName);
+		}
+
+		return rewardInfo;
 	}
 }
