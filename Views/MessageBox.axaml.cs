@@ -34,8 +34,10 @@ public partial class MessageBox : Window
 	{
 		var msgBox = new MessageBox(message, title, showCancelButton: false);
 		var owner = GetOwnerWindow();
-		if (owner != null) {
+		if (owner != null && owner.IsVisible) {
 			_ = msgBox.ShowDialog(owner);
+		} else {
+			msgBox.Show();
 		}
 	}
 
@@ -43,7 +45,7 @@ public partial class MessageBox : Window
 	{
 		var msgBox = new MessageBox(message, title, showCancelButton: true, okButtonText: okButtonText, cancelButtonText: cancelButtonText);
 		var owner = GetOwnerWindow();
-		if (owner != null) {
+		if (owner != null && owner.IsVisible) {
 			return (await msgBox.ShowDialog<bool?>(owner)) ?? false;
 		}
 		return false;

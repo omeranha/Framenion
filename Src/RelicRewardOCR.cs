@@ -26,12 +26,15 @@ public class RelicRewardOCR
 	private const int rewardsY = 316;
 	private const int itemNameHeight = 48;
 
+	private static bool ocrRunning = false;
+
 	public static void ReadRelicWindow()
 	{
-		if (!AppData.AppSettings.EnableRelicOverlay) return;
+		if (!AppData.AppSettings.EnableRelicOverlay || ocrRunning) return;
 
 		_ = Task.Run(async () => {
 			try {
+				ocrRunning = true;
 				await Task.Delay(500);
 				using var screenshot = ScreenCapture.Capture();
 				var rewards = ReadRewards(screenshot);
@@ -42,10 +45,12 @@ public class RelicRewardOCR
 				var rewardInfoTasks = rewards.Select(r => GameData.GetItemData(r.ItemName)).ToArray();
 				var rewardInfos = await Task.WhenAll(rewardInfoTasks);
 
-				var displayTasks = rewards.Zip(rewardInfos, (reward, info) => RelicRewardWindow.Display(info, reward.Rect.X, reward.Rect.Y + AppData.AppSettings.OverlayOffset, reward.Rect.Width, TimeSpan.FromSeconds(10)));
+				var displayTasks = rewards.Zip(rewardInfos, (reward, info) => RelicRewardWindow.Display(info, reward.Rect.X, reward.Rect.Y + AppData.AppSettings.OverlayOffset, reward.Rect.Width));
 				await Task.WhenAll(displayTasks);
 			} catch (Exception ex) {
 				MessageBox.Show("Error", $"Failed to read rewards: {ex.Message}");
+			} finally {
+				ocrRunning = false;
 			}
 		});
 	}

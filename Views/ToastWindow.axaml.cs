@@ -80,7 +80,11 @@ public partial class ToastWindow : Window
 			await FadeIn.RunAsync(toast, default);
 		};
 
-		toast.Show(toastOwner);
+		if (owner.IsVisible) {
+			toast.Show(owner);
+		} else {
+			toast.Show();
+		}
 		_ = AutoCloseAsync(toast, duration.Value);
 	}
 

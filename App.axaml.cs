@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using framenion.Src;
@@ -28,6 +29,28 @@ namespace framenion
 		{
 			var settings = await AppSettings.LoadAsync();
 			settings.ApplyToApplicationResources();
+			AppData.AppSettings = settings;
+		}
+
+		public void ToggleWindow()
+		{
+			if (Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop) {
+				var mw = desktop.MainWindow;
+				if (mw == null) return;
+				if (mw.IsVisible) {
+					mw.Hide();
+				} else {
+					mw.Show();
+					mw.WindowState = WindowState.Normal;
+				}
+			}
+		}
+
+		public void Exit()
+		{
+			if (Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop) {
+				desktop.MainWindow?.Close();
+			}
 		}
 	}
 }

@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
@@ -73,9 +74,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		if (Design.IsDesignMode) {
 			return;
 		}
-		Opened += async (s, e) => {
-			_ = InitializeAsync();
-		};
+		_ = InitializeAsync();
 		DataContext = this;
 		ItemsList.ItemsSource = displayedItems;
 		FissuresList.ItemsSource = displayedFissures;
@@ -99,6 +98,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		AppData.Monitor?.OnRewardDetected += () => {
 			RelicRewardOCR.ReadRelicWindow();
 		};
+
+		AppData.Monitor?.OnSelectionClosed += () => {
+			_ = Dispatcher.UIThread.InvokeAsync(() => {
+				foreach (var win in AppData.RewardWindows.ToArray()) {
+					if (win.IsVisible) {
+						win.Close();
+					}
+				}
+			});
+		};
 	}
 
 	protected override void OnClosed(EventArgs e)
@@ -115,11 +124,19 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		AppData.Monitor?.Dispose();
 	}
 
+	protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+	{
+		base.OnPropertyChanged(change);
+		if (change.Property == WindowStateProperty && change.NewValue is WindowState newState && newState == WindowState.Minimized) {
+			Hide();
+			ToastWindow.ShowToast("Framenion", "Application minimized to system tray", TimeSpan.FromSeconds(3));
+		}
+	}
+
 	private async Task InitializeAsync()
 	{
 		IsLoading = true;
 		try {
-			AppData.AppSettings = await AppSettings.LoadAsync();
 			await LoadNotifiedFissures();
 			loadedFissureAlertList = FissureAlertList.Load();
 

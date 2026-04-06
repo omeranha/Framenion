@@ -26,6 +26,8 @@ public class AppData
 
 	public static AppSettings AppSettings { get; set; } = new();
 
+	public static List<RelicRewardWindow> RewardWindows { get; } = [];
+
 	public static async Task<Stream> GetStreamAsync(string url)
 	{
 		var response = await HttpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);

@@ -21,6 +21,7 @@ public class WarframeMonitor : IDisposable
 
 	public event Action<bool>? OnProcessStateChanged;
 	public event Action? OnRewardDetected;
+	public event Action? OnSelectionClosed;
 
 	public WarframeMonitor()
 	{
@@ -97,9 +98,11 @@ public class WarframeMonitor : IDisposable
 
 		byte[] buffer = new byte[4096];
 		bufferReady.Set();
+		var timeout = TimeSpan.FromSeconds(1.0);
 		while (!token.IsCancellationRequested) {
-			int signaled = WaitHandle.WaitAny([dataReady, token.WaitHandle], 1000);
-			if (signaled == 1) break;
+			if (!dataReady.WaitOne(timeout)) {
+				continue;
+			}
 
 			using var stream = mmf.CreateViewStream();
 			int bytesRead = stream.Read(buffer, 0, buffer.Length);
@@ -122,11 +125,12 @@ public class WarframeMonitor : IDisposable
 
 			if (length > 0) {
 				string message = Encoding.Default.GetString(buffer, 4, length);
-				if (message.Contains("Got rewards")) {
+				if (message.Contains("Got rewards") || message.Contains("Pause countdown done")) {
 					OnRewardDetected?.Invoke();
+				} else if (message.Contains("Relic reward screen shut down")) {
+					OnSelectionClosed?.Invoke();
 				}
 			}
-
 			bufferReady.Set();
 		}
 	}
