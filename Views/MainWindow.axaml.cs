@@ -38,7 +38,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	private readonly HashSet<string> notifiedFissures = [];
 	private IReadOnlyList<FissureAlertEntry> loadedFissureAlertList = [];
 
-	public DispatcherTimer fissureRefreshTimer = new() { Interval = TimeSpan.FromMinutes(1) };
+	public DispatcherTimer fissureRefreshTimer = new() { Interval = TimeSpan.FromMinutes(2) };
 	public DispatcherTimer fissureUpdateTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
 	private CancellationTokenSource searchDebounce = new();
@@ -75,6 +75,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			return;
 		}
 		_ = InitializeAsync();
+		AppData.HttpClient.DefaultRequestHeaders.Add("User-Agent", "Framenion");
 		DataContext = this;
 		ItemsList.ItemsSource = displayedItems;
 		FissuresList.ItemsSource = displayedFissures;
