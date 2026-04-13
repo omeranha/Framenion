@@ -1,5 +1,4 @@
 using Avalonia;
-using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
@@ -13,10 +12,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
-using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -51,7 +48,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	private const double ItemsZoomMax = 2.00;
 	private const double ItemsZoomStep = 0.10;
 	public double ItemsTileWidth => Math.Round(200 * itemsZoom);
-	public double ItemsTileMinHeight => Math.Round(220 * itemsZoom);
+	public double ItemsTileMinHeight => Math.Round(245 * itemsZoom);
 
 	public new event PropertyChangedEventHandler? PropertyChanged;
 	private void OnPropertyChanged([CallerMemberName] string? propertyName = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
@@ -100,9 +97,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			});
 		};
 
-		AppData.Monitor?.OnRewardDetected += () => {
-			RelicRewardOCR.ReadRelicWindow();
-		};
+		AppData.Monitor?.OnRewardDetected += RelicRewardOCR.ReadRelicWindow;
 
 		AppData.Monitor?.OnSelectionClosed += () => {
 			_ = Dispatcher.UIThread.InvokeAsync(() => {
@@ -185,20 +180,31 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	private async Task InitializeDataInBackgroundAsync()
 	{
 		try {
-			string hashPath = Path.Combine(AppData.CacheDir, "export_hash");
-			AppData.HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Framenion");
-			var resp = await AppData.HttpClient.GetStringAsync("https://api.github.com/repos/calamity-inc/warframe-public-export-plus/commits/senpai");
-			using var json = JsonDocument.Parse(resp);
-			string latestHash = json.RootElement.GetProperty("sha").GetString() ?? "";
+			string exportHashFile = Path.Combine(AppData.CacheDir, "export_hash");
+			string itemsHashFile = Path.Combine(AppData.CacheDir, "items_hash");
 
-			string localHash = "";
-			if (File.Exists(hashPath)) {
-				localHash = (await File.ReadAllTextAsync(hashPath)).Trim();
+			AppData.HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Framenion");
+			var commitJsonText = await AppData.HttpClient.GetStringAsync("https://api.github.com/repos/calamity-inc/warframe-public-export-plus/commits/senpai");
+			using var commitJson = JsonDocument.Parse(commitJsonText);
+			string latestExportHash = commitJson.RootElement.GetProperty("sha").GetString() ?? string.Empty;
+
+			await using var marketVersionStream = await AppData.GetStreamAsync("https://api.warframe.market/v2/versions");
+			using var marketJson = await JsonDocument.ParseAsync(marketVersionStream);
+			string latestItemsHash = marketJson.RootElement.GetProperty("data").GetProperty("collections").GetProperty("items").GetString() ?? string.Empty;
+
+			static async Task<bool> UpdateHash(string filePath, string latestHash)
+			{
+				if (string.IsNullOrWhiteSpace(latestHash)) return false;
+
+				var localHash = File.Exists(filePath) ? (await File.ReadAllTextAsync(filePath)).Trim() : string.Empty;
+				if (string.Equals(localHash, latestHash, StringComparison.Ordinal)) return false;
+				await File.WriteAllTextAsync(filePath, latestHash);
+				return true;
 			}
 
-			bool needsUpdate = !string.IsNullOrEmpty(latestHash) && !string.Equals(localHash.Trim(), latestHash, StringComparison.Ordinal);
-			if (needsUpdate) {
-				await File.WriteAllTextAsync(hashPath, latestHash);
+			bool needsUpdate = await UpdateHash(exportHashFile, latestExportHash);
+			bool needsItemsUpdate = await UpdateHash(itemsHashFile, latestItemsHash);
+			if (needsUpdate || needsItemsUpdate) {
 				ToastWindow.Show("Data initialization", "A new update has been found, updating cache");
 			}
 
@@ -209,10 +215,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 				await VoidFissure.LoadVoidFissures();
 				await RefreshFissuresList();
 			});
+			await GameData.LoadWFMarketData(needsItemsUpdate);
 			string[] secondLoad = ["ExportWarframes", "ExportRecipes", "ExportWeapons", "ExportResources", "ExportMisc", "ExportSentinels", "ExportTextIcons", "ExportRelics", "ExportRewards"];
 			loadTasks = secondLoad.Select(f => GameData.LoadFile(f, AppData.CacheDir, needsUpdate));
 			await Task.WhenAll(loadTasks);
-			await GameData.LoadWFMarketData(needsUpdate);
 
 			await GameData.LoadExports();
 			await ParseInfo();

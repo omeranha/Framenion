@@ -3,6 +3,7 @@
         x:Class="framenion.MessageBox"
         xmlns:local="clr-namespace:framenion"
         x:DataType="local:MessageBox"
+        SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner"
         MinWidth="200"
         MaxWidth="400"

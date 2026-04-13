@@ -3,6 +3,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:framenion"
+        xmlns:src="clr-namespace:framenion.Src"
         x:Class="framenion.RelicRewardWindow"
         x:DataType="local:RelicRewardWindow"
         WindowDecorations="None"
@@ -10,25 +11,63 @@
         ShowInTaskbar="False"
         Topmost="True"
         Background="{DynamicResource RewardWindowBackgroundBrush}"
-        Width="200"
-        Height="150">
+        Width="240"
+        Height="200">
     <Border Padding="12">
-        <Grid RowDefinitions="*,Auto">
-            <TextBlock Name="NameItem" Text="{Binding ItemName}" FontSize="15" Foreground="{DynamicResource PrimaryForegroundBrush}" HorizontalAlignment="Center" TextWrapping="Wrap"/>
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Name="NameItem" Text="{Binding ItemName}" FontSize="15" Foreground="{DynamicResource PrimaryForegroundBrush}" HorizontalAlignment="Center" TextWrapping="Wrap"/>
             
-            <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="10,10,10,10">
-            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="15">
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5">
-                <Image Source="avares://framenion/assets/platinum.png" Width="24" Height="24" VerticalAlignment="Center"/>
-                <TextBlock Name="PlatinumValue" Text="{Binding Price}" Foreground="{DynamicResource PrimaryForegroundBrush}" VerticalAlignment="Center"/>
+            <StackPanel Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="10,10,10,10">
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="15">
+                    <StackPanel Grid.Row="0" Grid.Column="0"  Orientation="Horizontal" Spacing="5">
+                        <Image Source="avares://framenion/assets/platinum.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                        <TextBlock Name="PlatinumValue" Text="{Binding Price}" Foreground="{DynamicResource PrimaryForegroundBrush}" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="5">
+                        <Image Source="avares://framenion/assets/ducats.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                        <TextBlock Name="DucatValue" Text="{Binding Ducats}" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryForegroundBrush}"/>
+                    </StackPanel>
+                </Grid>
             </StackPanel>
 
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5">
-                <Image Source="avares://framenion/assets/ducats.png" Width="24" Height="24" VerticalAlignment="Center"/>
-                <TextBlock Name="DucatValue" Text="{Binding Ducats}" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryForegroundBrush}"/>
-            </StackPanel>
-            </Grid>
-                </StackPanel>
-            </Grid>
+            <TextBlock Grid.Row="2" Text="{Binding SetName}" FontSize="15" Foreground="{DynamicResource PrimaryForegroundBrush}" HorizontalAlignment="Center" TextWrapping="Wrap"/>
+            <ItemsControl Grid.Row="3" ItemsSource="{Binding SetItems}" HorizontalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="src:RecipeIngredient">
+                        <Border Width="46" Height="46"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Background="{Binding BackgroundColor}"
+                                CornerRadius="4"
+                                Margin="4"
+                                BorderThickness="1">
+                            <Grid>
+                                <Image Source="{Binding Icon}"
+                                       Stretch="Uniform"
+                                       Width="40" Height="40"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center">
+                                </Image>
+                                <TextBlock Text="{Binding OwnedCount}"
+                                           Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Bottom"
+                                           Background="#80000000"
+                                           Padding="2,0"
+                                           IsVisible="{Binding IsCountVisible}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Grid>
     </Border>
 </Window>

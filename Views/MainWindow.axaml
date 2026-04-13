@@ -215,6 +215,19 @@
                                                         <Image Source="{Binding Icon}" Stretch="Uniform" Width="70" Height="70"/>
                                                     </Border>
 
+                                                    <StackPanel Grid.Row="0" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Top" IsVisible="{Binding IsPriceVisible}">
+														<Image Source="avares://framenion/assets/platinum.png"
+                                                               Stretch="Uniform"
+                                                               Width="20" Height="20"
+                                                               VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Price}"
+                                                                   Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                                                   FontWeight="Bold"
+                                                                   FontSize="13"
+                                                                   TextAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </StackPanel>
+
                                                     <!-- Name + Mastery -->
                                                     <StackPanel Grid.Row="1"
                                                                 Orientation="Horizontal"
@@ -227,8 +240,7 @@
                                                                    FontWeight="SemiBold"
                                                                    TextWrapping="Wrap"
                                                                    TextAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   MaxWidth="140"/>
+                                                                   VerticalAlignment="Center"/>
 
                                                         <Image Name="mastery_icon"
                                                                Source="avares://framenion/assets/mastered.png"
@@ -269,8 +281,29 @@
                                                                                Stretch="Uniform"
                                                                                Width="40" Height="40"
                                                                                HorizontalAlignment="Center"
-                                                                               VerticalAlignment="Center"
-                                                                               ToolTip.Tip="{Binding CountName}"/>
+                                                                               VerticalAlignment="Center">
+                                                                               <ToolTip.Tip>
+                                                                                   <StackPanel Orientation="Vertical" Spacing="5">
+                                                                                       <TextBlock Text="{Binding CountName}" Foreground="{DynamicResource PrimaryForegroundBrush}"/>
+                                                                                       <Grid IsVisible="{Binding IsPriceVisible}">
+                                                                                           <Grid Grid.ColumnDefinitions="Auto,Auto" Grid.RowDefinitions="Auto,Auto" Grid.RowSpacing="5" Grid.ColumnSpacing="5">
+                                                                                               <Image Grid.Column="0" Grid.Row="0" Source="avares://framenion/assets/platinum.png" Width="20" Height="20" VerticalAlignment="Center"/>
+                                                                                               <TextBlock Grid.Column="1" Grid.Row="0"
+                                                                                                          Text="{Binding Price}"
+                                                                                                          Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                                                                                          VerticalAlignment="Center"
+                                                                                                          FontWeight="Bold"/>
+                                                                                               <Image Grid.Column="0" Grid.Row="1" Source="avares://framenion/assets/ducats.png" Width="20" Height="20" VerticalAlignment="Center"/>
+                                                                                               <TextBlock Grid.Column="1" Grid.Row="1"
+                                                                                                          Text="{Binding Ducats}"
+                                                                                                          Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                                                                                          VerticalAlignment="Center"
+                                                                                                          FontWeight="Bold"/>
+                                                                                           </Grid>
+                                                                                       </Grid>
+                                                                                   </StackPanel>
+                                                                               </ToolTip.Tip>
+                                                                        </Image>
 
                                                                         <TextBlock Text="{Binding OwnedCount}"
                                                                                    Foreground="{DynamicResource PrimaryForegroundBrush}"
@@ -448,8 +481,7 @@
                                                                    FontWeight="SemiBold"
                                                                    TextWrapping="Wrap"
                                                                    TextAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   MaxWidth="140"/>
+                                                                   VerticalAlignment="Center"/>
                                                     </StackPanel>
                                                     <ItemsControl Grid.Row="2" ItemsSource="{Binding Rewards}">
                                                         <ItemsControl.ItemsPanel>

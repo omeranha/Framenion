@@ -8,6 +8,7 @@ using framenion.Src;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 
 namespace framenion;
 
@@ -51,41 +52,42 @@ public partial class ToastWindow : Window
 
 	public static async void Show(string title, string body, ToastAnchor? anchor = null, TimeSpan ? duration = null, Bitmap? icon = null)
 	{
-		var owner = AppData.MainWindow;
-		if (owner == null) return;
+		Dispatcher.UIThread.Post(async () => {
+			var owner = AppData.MainWindow;
+			if (owner == null) return;
 
-		duration ??= TimeSpan.FromSeconds(5);
+			duration ??= TimeSpan.FromSeconds(5);
 
-		var toast = new ToastWindow(title, body, icon);
-		toast.Opened += async (_, _) => {
-			lock (activeToasts) {
-				activeToasts.Add(toast);
-			}
-
-			toast.ApplyStackedPosition(anchor ?? ToastAnchor.BottomRight);
-			var deltaX = toast.GetSlideDistance();
-			await CreateSlideAnimation(deltaX, SlideDurationMs, slideIn: true).RunAsync(toast);
-		};
-
-		toast.Closed += (_, _) =>
-		{
-			lock (activeToasts) {
-				activeToasts.Remove(toast);
-				foreach (var toast in activeToasts) {
-					toast.ApplyStackedPosition(anchor ?? ToastAnchor.BottomRight);
+			var toast = new ToastWindow(title, body, icon);
+			toast.Opened += async (_, _) => {
+				lock (activeToasts) {
+					activeToasts.Add(toast);
 				}
+
+				toast.ApplyStackedPosition(anchor ?? ToastAnchor.BottomRight);
+				var deltaX = toast.GetSlideDistance();
+				await CreateSlideAnimation(deltaX, SlideDurationMs, slideIn: true).RunAsync(toast);
+			};
+
+			toast.Closed += (_, _) => {
+				lock (activeToasts) {
+					activeToasts.Remove(toast);
+					foreach (var toast in activeToasts) {
+						toast.ApplyStackedPosition(anchor ?? ToastAnchor.BottomRight);
+					}
+				}
+			};
+
+			if (owner.IsVisible) {
+				toast.Show(owner);
+			} else {
+				toast.Show();
 			}
-		};
 
-		if (owner.IsVisible) {
-			toast.Show(owner);
-		} else {
-			toast.Show();
-		}
-
-		if (!toast.IsVisible) return;
-		await Task.Delay(duration.Value + TimeSpan.FromMilliseconds(SlideDurationMs * 2));
-		await toast.DismissAsync();
+			if (!toast.IsVisible) return;
+			await Task.Delay(duration.Value + TimeSpan.FromMilliseconds(SlideDurationMs * 2));
+			await toast.DismissAsync();
+		});
 	}
 
 	private async Task DismissAsync()

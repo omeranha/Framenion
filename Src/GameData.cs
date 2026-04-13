@@ -1,5 +1,4 @@
 ﻿using Avalonia.Media.Imaging;
-using Sdcb.PaddleOCR;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
@@ -8,7 +7,6 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading;
@@ -16,11 +14,12 @@ using System.Threading.Tasks;
 
 namespace framenion.Src;
 
-public class RewardInfo(string name)
+public class ItemData(string slug, string ducats, string price, string volume)
 {
-	public string ItemName { get; set; } = name;
-	public string Platinum { get; set; } = "0";
-	public string Ducats { get; set; } = "0";
+	public string Slug { get; set; } = slug;
+	public string Ducats { get; set; } = ducats;
+	public string Price { get; set; } = price;
+	public string Volume { get; set; } = volume;
 }
 
 public static class GameData
@@ -43,7 +42,7 @@ public static class GameData
 	public static FrozenDictionary<string, string> ExportMissionTypes { get; set; } = FrozenDictionary<string, string>.Empty;
 	public static FrozenDictionary<string, string> ExportFactions { get; set; } = FrozenDictionary<string, string>.Empty;
 
-	public static FrozenDictionary<string, (string slug, string ducats)> WarframeMarketItems { get; set; } = FrozenDictionary<string, (string, string)>.Empty;
+	public static FrozenDictionary<string, ItemData> WFMarketData { get; set; } = FrozenDictionary<string, ItemData>.Empty;
 	public static FrozenDictionary<string, (string name, RecipeDTO recipe)> ExportRecipes { get; set; } = FrozenDictionary<string, (string, RecipeDTO)>.Empty;
 	public static FrozenDictionary<string, string> ExportRecipeByName { get; set; } = FrozenDictionary<string, string>.Empty;
 	public static FrozenDictionary<string, ResourceDTO> ExportResources { get; set; } = FrozenDictionary<string, ResourceDTO>.Empty;
@@ -136,37 +135,53 @@ public static class GameData
 		}));
 	}
 
+	private static async Task DownloadToFileAsync(string url, string filePath)
+	{
+		using var stream = await AppData.GetStreamAsync(url);
+		using var fileStream = File.Create(filePath);
+		await stream.CopyToAsync(fileStream);
+	}
+
 	public static async Task LoadWFMarketData(bool updateFile)
 	{
-		var cacheFile = Path.Combine(AppData.CacheDir, "wfmarketitems.json");
+		var itemsFile = Path.Combine(AppData.CacheDir, "wfmarketitems.json");
+		var pricesFile = Path.Combine(AppData.CacheDir, "wfmarketprices.json");
 		try {
-			if (updateFile) {
-				var url = "https://api.warframe.market/v2/items/";
-				using var stream = await AppData.GetStreamAsync(url);
-				using var fileStream = File.Create(cacheFile);
-				await stream.CopyToAsync(fileStream);
+			if (!File.Exists(itemsFile) || updateFile) {
+				await DownloadToFileAsync("https://api.warframe.market/v2/items/", itemsFile);
 			}
 
-			using var cacheStream = File.OpenRead(cacheFile);
-			using var doc = await JsonDocument.ParseAsync(cacheStream);
-			var builder = new Dictionary<string, (string, string)>(StringComparer.Ordinal);
-			if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array) {
-				foreach (var item in data.EnumerateArray()) {
-					item.TryGetProperty("slug", out var slugProp);
-					item.TryGetProperty("i18n", out var i18nProp);
-					i18nProp.TryGetProperty("en", out var enProp);
-					enProp.TryGetProperty("name", out var nameProp);
-					var slug = slugProp.GetString() ?? "";
-					var ducats = "0";
-					if (item.TryGetProperty("ducats", out var ducatsProp) && ducatsProp.ValueKind == JsonValueKind.Number) {
-						ducats = ducatsProp.GetInt32().ToString();
-					}
-					var name = nameProp.GetString() ?? "";
-					builder[name] = (slug, ducats);
-				}
+			await DownloadToFileAsync("https://api.warframestat.us/wfinfo/prices", pricesFile);
+
+			using var pricesRead = File.OpenRead(pricesFile);
+			using var pricesDoc = await JsonDocument.ParseAsync(pricesRead);
+			var priceData = new Dictionary<string, (string volume, string price)>(StringComparer.Ordinal);
+			foreach (var item in pricesDoc.RootElement.EnumerateArray()) {
+				var name = item.GetProperty("name").GetString() ?? "";
+				if (string.IsNullOrEmpty(name)) continue;
+
+				var volume = item.GetProperty("today_vol").GetString() ?? "";
+				var price = item.GetProperty("custom_avg").GetString() ?? "";
+				priceData[name] = (volume, price);
 			}
 
-			WarframeMarketItems = builder.ToFrozenDictionary(StringComparer.Ordinal);
+			using var itemsRead = File.OpenRead(itemsFile);
+			using var itemsDoc = await JsonDocument.ParseAsync(itemsRead);
+			var builder = new Dictionary<string, ItemData>(StringComparer.Ordinal);
+			if (!itemsDoc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+				return;
+
+			foreach (var item in data.EnumerateArray()) {
+				var slug = item.GetProperty("slug").GetString() ?? string.Empty;
+				if (string.IsNullOrEmpty(slug)) continue;
+
+				var name = item.GetProperty("i18n").GetProperty("en").GetProperty("name").GetString() ?? string.Empty;
+				var ducats = item.TryGetProperty("ducats", out var d) && d.ValueKind == JsonValueKind.Number ? d.GetInt32().ToString() : string.Empty;
+				priceData.TryGetValue(name, out var priceInfo);
+				builder[name] = new ItemData(slug, ducats, priceInfo.price, priceInfo.volume);
+			}
+
+			WFMarketData = builder.ToFrozenDictionary(StringComparer.Ordinal);
 		} catch (Exception ex) {
 			MessageBox.Show("Error", "Failed to load Warframe Market items: " + ex.Message);
 		}
@@ -177,10 +192,7 @@ public static class GameData
 		var exportCacheFile = Path.Combine(cacheDir, file + ".json");
 		if (!File.Exists(exportCacheFile) || updateFile) {
 			try {
-				var url = "https://raw.githubusercontent.com/calamity-inc/warframe-public-export-plus/refs/heads/senpai/" + file + ".json";
-				using var inStream = await AppData.GetStreamAsync(url);
-				await using var outStream = File.Create(exportCacheFile);
-				await inStream.CopyToAsync(outStream);
+				await DownloadToFileAsync("https://raw.githubusercontent.com/calamity-inc/warframe-public-export-plus/refs/heads/senpai/" + file + ".json", exportCacheFile);
 			} catch {
 				throw new FileNotFoundException("Failed to retrieve file: " + file);
 			}
@@ -357,18 +369,22 @@ public static class GameData
 		var ingredients = recipe.recipe.Ingredients;
 		if (ingredients == null) return result;
 
-		result.Add(new RecipeIngredient(parentName + " Blueprint", parentType, 1, blueprintPath) { RecipeKey = recipe.name});
+		var blueprint = parentName + " Blueprint";
+		WFMarketData.TryGetValue(blueprint, out var parentData);
+		result.Add(new RecipeIngredient(blueprint, parentType, 1, blueprintPath, parentData?.Price ?? "", parentData?.Ducats ?? "") {
+			RecipeKey = recipe.name,
+		});
 		foreach (var ingredient in ingredients) {
 			var ingredientType = ingredient.Type;
 			if (string.IsNullOrWhiteSpace(ingredientType)) continue;
 			if (!ExportResources.TryGetValue(ingredientType, out var resource) || resource == null) continue;
 			var ingredientLangKey = resource.Name;
-			result.Add(new RecipeIngredient(
-				ResolveName(ingredientLangKey),
-				ingredientType,
-				ingredient.Count,
-				GetLocalIconPath(resource.Icon)
-			));
+			var name = ResolveName(ingredientLangKey);
+			if (!WFMarketData.TryGetValue(name, out var ingredientData)) {
+				name = $"{name} Blueprint";
+				WFMarketData.TryGetValue(name, out ingredientData);
+			}
+			result.Add(new RecipeIngredient(name, ingredientType, ingredient.Count, GetLocalIconPath(resource.Icon), ingredientData?.Price ?? "", ingredientData?.Ducats ?? ""));
 		}
 		return result;
 	}
@@ -450,7 +466,8 @@ public static class GameData
 				var name = ResolveName(warframe.Name);
 				var category = warframe.Category;
 				if (category is "MechSuits" or "SpaceSuits") category = "Vehicles";
-				ItemsList.Add(new Item(name, type, BuildIngredients(name, type, blueprintPath), category, GetLocalIconPath(warframe.Icon), false));
+				WFMarketData.TryGetValue($"{name} Set", out var marketData);
+				ItemsList.Add(new Item(name, type, BuildIngredients(name, type, blueprintPath), category, GetLocalIconPath(warframe.Icon), false, marketData?.Price ?? ""));
 			}
 
 			foreach (var (type, weapon) in ExportWeapons) {
@@ -460,13 +477,15 @@ public static class GameData
 				if (type.Contains("/Hoverboard/")) category = "Vehicles";
 				else if (type.Contains("/Pets/")) category = "Companions";
 				else if (type.Contains("Amp") && type.Contains("Barrel")) category = "OperatorAmps";
-				ItemsList.Add(new Item(name, type, BuildIngredients(name, type, blueprintPath), category, GetLocalIconPath(weapon.Icon), false));
+				WFMarketData.TryGetValue($"{name} Set", out var marketData);
+				ItemsList.Add(new Item(name, type, BuildIngredients(name, type, blueprintPath), category, GetLocalIconPath(weapon.Icon), false, marketData?.Price ?? ""));
 			}
 
 			foreach (var (type, sentinel) in ExportSentinels) {
 				if (type.Contains("/Pets/")) continue;
 				var name = ResolveName(sentinel.Name);
-				ItemsList.Add(new Item(name, type, BuildIngredients(name, type, blueprintPath), "Companions", GetLocalIconPath(sentinel.Icon), false));
+				WFMarketData.TryGetValue($"{name} Set", out var marketData);
+				ItemsList.Add(new Item(name, type, BuildIngredients(name, type, blueprintPath), "Companions", GetLocalIconPath(sentinel.Icon), false, marketData?.Price ?? ""));
 			}
 
 			foreach (var (type, relic) in ExportRelics) {
@@ -585,31 +604,6 @@ public static class GameData
 			MessageBox.Show("warframe-api-helper error", msg);
 			return;
 		}
-	}
-
-	public static async Task<RewardInfo> GetItemData(string itemName)
-	{
-		WarframeMarketItems.TryGetValue(itemName, out var marketInfo);
-		var rewardInfo = new RewardInfo(itemName);
-		try {
-			if (!string.IsNullOrEmpty(marketInfo.slug)) {
-				rewardInfo.Ducats = marketInfo.ducats;
-				using var stream = await AppData.GetStreamAsync($"https://api.warframe.market/v2/orders/item/{marketInfo.slug}/top");
-				using var doc = await JsonDocument.ParseAsync(stream);
-
-				if (doc.RootElement.TryGetProperty("data", out var data) && data.TryGetProperty("sell", out var sell) &&
-					sell.ValueKind == JsonValueKind.Array && sell.GetArrayLength() > 0) {
-					var first = sell[0];
-					if (first.TryGetProperty("platinum", out var platinumProp)) {
-						rewardInfo.Platinum = platinumProp.GetInt32().ToString();
-					}
-				}
-			}
-		} catch {
-			MessageBox.Show("Error", "Failed to fetch market data for " + itemName);
-		}
-
-		return rewardInfo;
 	}
 
 	public static long XpToMaster(string type)
