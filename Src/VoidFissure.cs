@@ -1,12 +1,15 @@
 using Avalonia;
 using Avalonia.Media;
+using HarfBuzzSharp;
+using MicroCom.Runtime;
 using System;
 using System.ComponentModel;
 using System.Globalization;
 using System.Net.Http;
+using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-
 namespace framenion.Src;
 
 public class VoidFissure : INotifyPropertyChanged
@@ -79,19 +82,18 @@ public class VoidFissure : INotifyPropertyChanged
 				var node = mission.GetProperty("Node").ToString();
 				var nodeInfo = GameData.ExportRegions[node];
 				int baseLvl = (mission.TryGetProperty("Hard", out var hardEl) && hardEl.GetBoolean()) ? 100 : 0;
-				var missionType = culture.ToTitleCase(GameData.Lang[GameData.ExportMissionTypes[nodeInfo.MissionType]].ToLower());
 				var relicInfo = GameData.relicType.TryGetValue(modifier, out (string name, string color) relic);
 				var fissure = new VoidFissure {
 					Id = mission.GetProperty("_id").GetProperty("$oid").ToString(),
 					Modifier = modifier,
-					Node = GameData.Lang[nodeInfo.Name],
+					Node = nodeInfo.Name,
 					IsHard = baseLvl == 100,
 					Tier = relic.name,
 					Color = relic.color,
 					Expiry = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime,
-					Planet = GameData.Lang[nodeInfo.SystemName],
-					Faction = GameData.Lang[GameData.ExportFactions[nodeInfo.Faction]],
-					MissionType = missionType,
+					Planet = nodeInfo.SystemName,
+					Faction = GetFaction(nodeInfo.FactionIndex),
+					MissionType = GetMissionType(nodeInfo.MissionIndex),
 					MinLevel = nodeInfo.MinEnemyLevel + baseLvl + 5,
 					MaxLevel = nodeInfo.MaxEnemyLevel + baseLvl + 5
 				};
@@ -113,6 +115,56 @@ public class VoidFissure : INotifyPropertyChanged
 			"Requiem" => 5,
 			"Omnia" => 6,
 			_ => int.MaxValue
+		};
+	}
+
+	public static string GetFaction(int index)
+	{
+		return index switch {
+			0 => "Grineer",
+			1 => "Corpus",
+			2 => "Infested",
+			3 => "Corrupted",
+			7 => "The Murmur",
+			8 => "Scaldra",
+			9 => "Techrot",
+			_ => "Unknown"
+		};
+	}
+
+	public static string GetMissionType(int index)
+	{
+		return index switch {
+			0 => "Assassination",
+			1 => "Exterminate",
+			2 => "Survival",
+			3 => "Rescue",
+			4 => "Sabotage",
+			5 => "Capture",
+			7 => "Spy",
+			8 => "Defense",
+			9 => "Mobile Defense",
+			13 => "Interception",
+			14 => "Hijack",
+			15 => "Hive Sabotage",
+			17 => "Excavation",
+			21 => "Infested Salvage",
+			22 => "Rathuum",
+			24 => "Pursuit",
+			25 => "Rush",
+			26 => "Assault",
+			27 => "Defection",
+			28 => "Landscape",
+			31 => "The Circuit",
+			33 => "Disruption",
+			34 => "Void Flood",
+			35 => "Void Cascade",
+			36 => "Void Armageddon",
+			38 => "Alchemy",
+			40 => "Legacyte Harvest",
+			41 => "Shrine Defense",
+			42 => "Faceoff",
+			_ => "Unknown"
 		};
 	}
 }

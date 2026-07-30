@@ -22,7 +22,7 @@ public class AppData
 	public static ConcurrentDictionary<string, Lazy<Bitmap?>> BitmapCache { get; } = new(StringComparer.Ordinal);
 	public static  SemaphoreSlim IconDownloadSemaphore { get; } = new(10, 10);
 	public static HttpClient HttpClient { get; } = new() {
-		BaseAddress = new Uri("https://browse.wf/"),
+		BaseAddress = new Uri("http://content.warframe.com/PublicExport"),
 	};
 	public static PaddleOcrAll? PaddleEngine { get; set; }
 	public static WarframeMonitor? Monitor { get; } = new();
@@ -36,5 +36,12 @@ public class AppData
 		var response = await HttpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
 		response.EnsureSuccessStatusCode();
 		return await response.Content.ReadAsStreamAsync();
+	}
+
+	public static async Task DownloadToFileAsync(string url, string filePath)
+	{
+		using var stream = await GetStreamAsync(url);
+		using var fileStream = File.Create(filePath);
+		await stream.CopyToAsync(fileStream);
 	}
 }

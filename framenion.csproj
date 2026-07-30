@@ -37,6 +37,7 @@
 			<IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
 			<PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
 		</PackageReference>
+		<PackageReference Include="Ecng.Lzma" Version="1.0.65" />
 		<PackageReference Include="OpenCvSharp4" Version="4.13.0.20260330" />
 		<PackageReference Include="Sdcb.PaddleInference" Version="3.0.1" />
 		<PackageReference Include="Sdcb.PaddleOCR" Version="3.0.1" />

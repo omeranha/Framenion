@@ -5,6 +5,9 @@ namespace framenion.Src;
 
 public class ItemDTO
 {
+	[JsonPropertyName("uniqueName")]
+	public string UniqueName { get; set; } = "";
+
 	[JsonPropertyName("name")]
 	public string Name { get; set; } = "";
 
@@ -16,10 +19,19 @@ public class ItemDTO
 
 	[JsonPropertyName("partType")]
 	public string? PartType { get; set; }
+
+	[JsonPropertyName("maxLevelCap")]
+	public int? MaxLevelCap { get; set; }
+
+	[JsonPropertyName("description")]
+	public string? Description { get; set; }
 }
 
 public class RecipeDTO
 {
+	[JsonPropertyName("uniqueName")]
+	public string UniqueName { get; set; } = "";
+
 	[JsonPropertyName("resultType")]
 	public string ResultType { get; set; } = "";
 
@@ -34,10 +46,16 @@ public class RecipeIngredientDTO
 
 	[JsonPropertyName("ItemCount")]
 	public int Count { get; set; } = 1;
+
+	[JsonPropertyName("ProductCategory")]
+	public string ProductCategory { get; set; } = "";
 }
 
 public class ResourceDTO
 {
+	[JsonPropertyName("uniqueName")]
+	public string UniqueName { get; set; } = "";
+
 	[JsonPropertyName("name")]
 	public string Name { get; set; } = "";
 
@@ -47,17 +65,20 @@ public class ResourceDTO
 
 public class RegionDTO
 {
+	[JsonPropertyName("uniqueName")]
+	public string UniqueName { get; set; } = "";
+
 	[JsonPropertyName("name")]
 	public string Name { get; set; } = "";
 
 	[JsonPropertyName("systemName")]
 	public string SystemName { get; set; } = "";
 
-	[JsonPropertyName("missionType")]
-	public string MissionType { get; set; } = "";
+	[JsonPropertyName("missionIndex")]
+	public int MissionIndex { get; set; } = 0;
 
-	[JsonPropertyName("faction")]
-	public string Faction { get; set; } = "";
+	[JsonPropertyName("factionIndex")]
+	public int FactionIndex { get; set; } = 0;
 
 	[JsonPropertyName("minEnemyLevel")]
 	public int MinEnemyLevel { get; set; } = 0;
@@ -68,26 +89,26 @@ public class RegionDTO
 
 public class RelicDTO
 {
-	[JsonPropertyName("category")]
-	public string Category { get; set; } = "";
-
-	[JsonPropertyName("era")]
-	public string Era { get; set; } = "";
+	[JsonPropertyName("uniqueName")]
+	public string UniqueName { get; set; } = "";
 
 	[JsonPropertyName("icon")]
 	public string Icon { get; set; } = "";
 
-	[JsonPropertyName("quality")]
-	public string Quality { get; set; } = "";
+	[JsonPropertyName("name")]
+	public string Name { get; set; } = "";
 
-	[JsonPropertyName("rewardManifest")]
-	public string RewardManifest { get; set; } = "";
+	[JsonPropertyName("description")]
+	public string Description { get; set; } = "";
+
+	[JsonPropertyName("relicRewards")]
+	public RewardDTO[] RelicRewards { get; set; } = [];
 }
 
 public class RewardDTO
 {
-	[JsonPropertyName("type")]
-	public string Type { get; set; } = "";
+	[JsonPropertyName("rewardName")]
+	public string RewardName { get; set; } = "";
 
 	[JsonPropertyName("ItemCount")]
 	public int Count { get; set; } = 1;

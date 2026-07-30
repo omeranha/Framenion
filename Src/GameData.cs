@@ -7,6 +7,8 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading;
@@ -37,13 +39,16 @@ public static class GameData
 	public static List<Item> ItemsList { get; set; } = [];
 	public static List<Relic> RelicList { get; set; } = [];
 
+	public static FrozenDictionary<string, string> ExportManifest { get; set; } = FrozenDictionary<string, string>.Empty;
+
+
 	public static FrozenDictionary<string, string> Lang { get; set; } = FrozenDictionary<string, string>.Empty;
 	public static FrozenDictionary<string, string> ExportTextIcons { get; set; } = FrozenDictionary<string, string>.Empty;
 	public static FrozenDictionary<string, string> ExportMissionTypes { get; set; } = FrozenDictionary<string, string>.Empty;
 	public static FrozenDictionary<string, string> ExportFactions { get; set; } = FrozenDictionary<string, string>.Empty;
 
 	public static FrozenDictionary<string, ItemData> WFMarketData { get; set; } = FrozenDictionary<string, ItemData>.Empty;
-	public static FrozenDictionary<string, (string name, RecipeDTO recipe)> ExportRecipes { get; set; } = FrozenDictionary<string, (string, RecipeDTO)>.Empty;
+	public static FrozenDictionary<string, RecipeDTO> ExportRecipes { get; set; } = FrozenDictionary<string, RecipeDTO>.Empty;
 	public static FrozenDictionary<string, string> ExportRecipeByName { get; set; } = FrozenDictionary<string, string>.Empty;
 	public static FrozenDictionary<string, ResourceDTO> ExportResources { get; set; } = FrozenDictionary<string, ResourceDTO>.Empty;
 	public static FrozenDictionary<string, ItemDTO> ExportWarframes { get; set; } = FrozenDictionary<string, ItemDTO>.Empty;
@@ -55,20 +60,6 @@ public static class GameData
 
 	public static List<string> UniquelevelCaps { get; set; } = [];
 	public static List<string> PrimeItems { get; set; } = [];
-
-	public static async Task<FrozenDictionary<string, T>> Deserialize<T>(string path, JsonTypeInfo<T> typeInfo)
-	{
-		await using var stream = File.OpenRead(path);
-		using var doc = await JsonDocument.ParseAsync(stream);
-		var builder = new Dictionary<string, T>(StringComparer.Ordinal);
-		foreach (var element in doc.RootElement.EnumerateObject()) {
-			var item = JsonSerializer.Deserialize<T>(element.Value, typeInfo);
-			if (item != null) {
-				builder[element.Name] = item;
-			}
-		}
-		return builder.ToFrozenDictionary(StringComparer.Ordinal);
-	}
 
 	public static Bitmap? GetOrCreateBitmap(string localPath, int decodeWidth = 80)
 	{
@@ -119,6 +110,8 @@ public static class GameData
 			using var iconStream = await AppData.GetStreamAsync(icon);
 			using var fileStream = File.Create(iconPath);
 			await iconStream.CopyToAsync(fileStream);
+		} catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound) {
+			// Ignore missing icon
 		} finally {
 			AppData.IconDownloadSemaphore.Release();
 		}
@@ -135,23 +128,16 @@ public static class GameData
 		}));
 	}
 
-	private static async Task DownloadToFileAsync(string url, string filePath)
-	{
-		using var stream = await AppData.GetStreamAsync(url);
-		using var fileStream = File.Create(filePath);
-		await stream.CopyToAsync(fileStream);
-	}
-
 	public static async Task LoadWFMarketData(bool updateFile)
 	{
 		var itemsFile = Path.Combine(AppData.CacheDir, "wfmarketitems.json");
 		var pricesFile = Path.Combine(AppData.CacheDir, "wfmarketprices.json");
 		try {
 			if (!File.Exists(itemsFile) || updateFile) {
-				await DownloadToFileAsync("https://api.warframe.market/v2/items/", itemsFile);
+				await AppData.DownloadToFileAsync("https://api.warframe.market/v2/items/", itemsFile);
 			}
 
-			await DownloadToFileAsync("https://api.warframestat.us/wfinfo/prices", pricesFile);
+			await AppData.DownloadToFileAsync("https://api.warframestat.us/wfinfo/prices", pricesFile);
 
 			using var pricesRead = File.OpenRead(pricesFile);
 			using var pricesDoc = await JsonDocument.ParseAsync(pricesRead);
@@ -187,12 +173,13 @@ public static class GameData
 		}
 	}
 
+	/*
 	public static async Task LoadFile(string file, string cacheDir, bool updateFile)
 	{
 		var exportCacheFile = Path.Combine(cacheDir, file + ".json");
 		if (!File.Exists(exportCacheFile) || updateFile) {
 			try {
-				await DownloadToFileAsync("https://raw.githubusercontent.com/calamity-inc/warframe-public-export-plus/refs/heads/senpai/" + file + ".json", exportCacheFile);
+				await AppData.DownloadToFileAsync("https://raw.githubusercontent.com/calamity-inc/warframe-public-export-plus/refs/heads/senpai/" + file + ".json", exportCacheFile);
 			} catch {
 				throw new FileNotFoundException("Failed to retrieve file: " + file);
 			}
@@ -341,6 +328,7 @@ public static class GameData
 			MessageBox.Show("Error", $"Error loading {file}: {ex.Message}");
 		}
 	}
+	*/
 
 	private static string ResolveName(string langKey)
 	{
@@ -351,7 +339,7 @@ public static class GameData
 	private static IEnumerable<string> GetIngredientIconUrls(string type)
 	{
 		if (!ExportRecipes.TryGetValue(type, out var recipe)) yield break;
-		var ingredients = recipe.recipe.Ingredients;
+		var ingredients = recipe.Ingredients;
 		if (ingredients == null || ingredients.Count < 1 ) yield break;
 		foreach (var ingredient in ingredients) {
 			var ingredientType = ingredient.Type;
@@ -366,13 +354,13 @@ public static class GameData
 	{
 		var result = new ObservableCollection<RecipeIngredient>();
 		if (!ExportRecipes.TryGetValue(parentType, out var recipe)) return result;
-		var ingredients = recipe.recipe.Ingredients;
+		var ingredients = recipe.Ingredients;
 		if (ingredients == null) return result;
 
 		var blueprint = parentName + " Blueprint";
 		WFMarketData.TryGetValue(blueprint, out var parentData);
 		result.Add(new RecipeIngredient(blueprint, parentType, 1, blueprintPath, parentData?.Price ?? "", parentData?.Ducats ?? "") {
-			RecipeKey = recipe.name,
+			RecipeKey = recipe.UniqueName,
 		});
 		foreach (var ingredient in ingredients) {
 			var ingredientType = ingredient.Type;
@@ -389,6 +377,7 @@ public static class GameData
 		return result;
 	}
 
+	/*
 	private static ObservableCollection<Reward> BuildRewards(string type)
 	{
 		var result = new ObservableCollection<Reward>();
@@ -414,7 +403,7 @@ public static class GameData
 			}
 
 			if (ExportRecipeByName.TryGetValue(rewardType, out var recipeEntry)) {
-				var recipe = ExportRecipes[recipeEntry].recipe;
+				var recipe = ExportRecipes[recipeEntry];
 				string displayName = "";
 				string iconPath = "";
 
@@ -434,10 +423,11 @@ public static class GameData
 		}
 		return new ObservableCollection<Reward>(result.OrderBy(r => GetRaritySortKey(r.Rarity)));
 	}
+	*/
 
 	private static bool ShouldSkipWeapon(string type, ItemDTO weapon)
 	{
-		if (type.Contains("PvPVariant") || type.Contains("Doppelganger")) return true;
+		if (type.Contains("PvPVariant") || type.Contains("Doppelganger") || type.Contains("ANTIGEN") || type.Contains("MUTAGEN") || (type.Contains("OperatorAmplifiers") && !type.Contains("Barrel"))) return true;
 		var partType = weapon.PartType;
 		if (partType == null) return false;
 		// moas, hounds, k-drives, zaw blades and amp prisms
@@ -457,9 +447,11 @@ public static class GameData
 				foreach (var url in GetIngredientIconUrls(type)) iconUrls.Add(url);
 			}
 
+			/*
 			foreach (var (type, relic) in ExportRelics) {
 				iconUrls.Add(relic.Icon);
 			}
+			*/
 			await DownloadIconsAsync(iconUrls);
 
 			foreach (var (type, warframe) in ExportWarframes) {
@@ -488,24 +480,9 @@ public static class GameData
 				ItemsList.Add(new Item(name, type, BuildIngredients(name, type, blueprintPath), "Companions", GetLocalIconPath(sentinel.Icon), false, marketData?.Price ?? ""));
 			}
 
+			
 			foreach (var (type, relic) in ExportRelics) {
-				var quality = relic.Quality;
-				switch (relic.Quality) {
-					case "VPQ_BRONZE":
-						quality = "Intact";
-						break;
-					case "VPQ_SILVER":
-						quality = "Exceptional";
-						break;
-					case "VPQ_GOLD":
-						quality = "Flawless";
-						break;
-					case "VPQ_PLATINUM":
-						quality = "Radiant";
-						break;
-				}
-				var name = $"{relic.Era} {relic.Category} Relic [{quality}]";
-				RelicList.Add(new Relic(name, type, GetLocalIconPath(relic.Icon), relic.Era, quality, BuildRewards(relic.RewardManifest)));
+				RelicList.Add(new Relic(relic.Name, type, GetLocalIconPath(relic.Icon)));
 			}
 		} catch (Exception ex) {
 			MessageBox.Show("Error", "Failed to load exports: " + ex.Message);

@@ -180,48 +180,33 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	private async Task InitializeDataInBackgroundAsync()
 	{
 		try {
-			string exportHashFile = Path.Combine(AppData.CacheDir, "export_hash");
-			string itemsHashFile = Path.Combine(AppData.CacheDir, "items_hash");
+			await PublicExport.UpdateManifest();
+			await PublicExport.ParseExportManifest();
+			await PublicExport.ParseRegions();
 
-			AppData.HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Framenion");
-			var commitJsonText = await AppData.HttpClient.GetStringAsync("https://api.github.com/repos/calamity-inc/warframe-public-export-plus/commits/senpai");
-			using var commitJson = JsonDocument.Parse(commitJsonText);
-			string latestExportHash = commitJson.RootElement.GetProperty("sha").GetString() ?? string.Empty;
-
-			await using var marketVersionStream = await AppData.GetStreamAsync("https://api.warframe.market/v2/versions");
-			using var marketJson = await JsonDocument.ParseAsync(marketVersionStream);
-			string latestItemsHash = marketJson.RootElement.GetProperty("data").GetProperty("collections").GetProperty("items").GetString() ?? string.Empty;
-
-			static async Task<bool> UpdateHash(string filePath, string latestHash)
-			{
-				if (string.IsNullOrWhiteSpace(latestHash)) return false;
-
-				var localHash = File.Exists(filePath) ? (await File.ReadAllTextAsync(filePath)).Trim() : string.Empty;
-				if (string.Equals(localHash, latestHash, StringComparison.Ordinal)) return false;
-				await File.WriteAllTextAsync(filePath, latestHash);
-				return true;
-			}
-
-			bool needsUpdate = await UpdateHash(exportHashFile, latestExportHash);
-			bool needsItemsUpdate = await UpdateHash(itemsHashFile, latestItemsHash);
-			if (needsUpdate || needsItemsUpdate) {
-				ToastWindow.Show("Data initialization", "A new update has been found, updating cache");
-			}
-
-			string[] firstLoad = ["dict.en", "ExportRegions", "ExportMissionTypes", "ExportFactions"];
-			var loadTasks = firstLoad.Select(f => GameData.LoadFile(f, AppData.CacheDir, needsUpdate));
-			await Task.WhenAll(loadTasks);
 			await Dispatcher.UIThread.InvokeAsync(async () => {
 				await VoidFissure.LoadVoidFissures();
 				await RefreshFissuresList();
 			});
+
+			foreach (var file in Directory.GetFiles(AppData.CacheDir)) {
+				await PublicExport.ParseFile(Path.GetFileName(file));
+			}
+
+			await GameData.LoadExports();
+			await ParseInfo();
+			/*
+			string[] firstLoad = ["dict.en", "ExportRegions", "ExportMissionTypes", "ExportFactions"];
+			var loadTasks = firstLoad.Select(f => GameData.LoadFile(f, AppData.CacheDir, needsUpdate));
+			await Task.WhenAll(loadTasks);
 			await GameData.LoadWFMarketData(needsItemsUpdate);
 			string[] secondLoad = ["ExportWarframes", "ExportRecipes", "ExportWeapons", "ExportResources", "ExportMisc", "ExportSentinels", "ExportTextIcons", "ExportRelics", "ExportRewards"];
 			loadTasks = secondLoad.Select(f => GameData.LoadFile(f, AppData.CacheDir, needsUpdate));
 			await Task.WhenAll(loadTasks);
 
-			await GameData.LoadExports();
-			await ParseInfo();
+			
+			
+			*/
 		} catch (Exception e) {
 			MessageBox.Show("Error", "Failed to initialize data in background: " + e.Message);
 		}
@@ -251,25 +236,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			creditsText = c.ToString("N0");
 		}
 
+		
 		root.TryGetProperty("PlayerLevel", out var mr);
 		var mr_str = (mr.GetUInt16() > 30) ? "L" + (mr.GetUInt16() - 30) : mr.ToString();
 		masteryText = mr_str;
-		if (GameData.ExportTextIcons.TryGetValue($"RANK_{mr}", out var rankIcon)) {
-			await GameData.DownloadIconAsync(rankIcon);
-			var rank_path = GameData.GetLocalIconPath(rankIcon);
+		using var textIconsStream = await AppData.GetStreamAsync("https://raw.githubusercontent.com/calamity-inc/warframe-public-export-plus/refs/heads/senpai/ExportTextIcons.json");
+		using var textIcons = await JsonDocument.ParseAsync(textIconsStream);
+		if (textIcons.RootElement.TryGetProperty($"RANK_{mr}", out var rank)) {
+			rank.TryGetProperty("DIT_AUTO", out var rankIcon);
+			await GameData.DownloadIconAsync($"https://browse.wf{rankIcon.ToString()}");
+			var rank_path = GameData.GetLocalIconPath(rankIcon.ToString());
 			masteryIcon = new Bitmap(rank_path);
 		}
 
 		root.TryGetProperty("ActiveAvatarImageType", out var icon_path);
-		using var icon_doc = await AppData.GetStreamAsync(icon_path.ToString());
-		using var glyph_doc = await JsonDocument.ParseAsync(icon_doc);
-		if (glyph_doc.RootElement.ValueKind == JsonValueKind.Object && glyph_doc.RootElement.TryGetProperty("icon", out var icon)) {
-			var icon_url = icon.GetString();
-			if (icon_url != null) {
-				await GameData.DownloadIconAsync(icon_url);
-				var glyph_path = GameData.GetLocalIconPath(icon_url);
-				playerIcon = new Bitmap(glyph_path);
-			}
+		GameData.ExportManifest.TryGetValue(icon_path.ToString(), out var icon);
+		if (icon != null) {
+			await GameData.DownloadIconAsync(icon);
+			var glyph_path = GameData.GetLocalIconPath(icon);
+			playerIcon = new Bitmap(glyph_path);
 		}
 
 		if (!root.TryGetProperty("MiscItems", out var miscEl) ||
@@ -341,8 +326,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 				}
 
 				ingred.OwnedCount = ingred_count;
-				if (!GameData.ExportRecipes.TryGetValue(type, out var subRecipe) || subRecipe.recipe.Ingredients == null) continue;
-				var subIngredients = subRecipe.recipe.Ingredients;
+				if (!GameData.ExportRecipes.TryGetValue(type, out var subRecipe) || subRecipe.Ingredients == null) continue;
+				var subIngredients = subRecipe.Ingredients;
 				bool canCraft = true;
 				foreach (var sub in subIngredients) {
 					if (!miscByType.TryGetValue(sub.Type, out var subEntry) || subEntry < sub.Count) {
