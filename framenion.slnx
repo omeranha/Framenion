@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="framenion.csproj" />
+  <Project Path="tests/Framenion.Tests/Framenion.Tests.csproj" />
 </Solution>
