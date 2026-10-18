@@ -1,38 +1,42 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using framenion.Src;
-using Sdcb.PaddleInference;
-using Sdcb.PaddleOCR.Models;
-using Sdcb.PaddleOCR.Models.Online;
+using framenion.Src.Ocr;
+using framenion.Src.Riven;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace framenion;
 
-public partial class MainWindow : Window, INotifyPropertyChanged
+public partial class MainWindow : Window
 {
-	public ObservableCollection<Item> displayedItems = [];
-	public ObservableCollection<VoidFissure> displayedFissures = [];
-	public ObservableCollection<Relic> displayedRelics = [];
+	private readonly BulkObservableCollection<Item> displayedItems = [];
+	private readonly BulkObservableCollection<Relic> displayedRelics = [];
+	private readonly BulkObservableCollection<OwnedRiven> displayedRivens = [];
+	private readonly BulkObservableCollection<VoidFissure> displayedFissures = [];
 
 	private string searchText = string.Empty;
 	private string searchRelicsText = string.Empty;
+	private string searchRivensText = string.Empty;
 	private string currentItemsFilter = "All";
 	private string currentRelicsFilter = "All";
+	private string currentRivensFilter = "All";
 	private string currentFissureFilter = "Normal";
+	private bool hideUnownedRelics;
 
-	private readonly string inventoryFile = Path.Combine(AppData.AppDataDir, "inventory.json");
+	/// <summary>Sort orders offered on the relics tab.</summary>
+	public List<string> RelicSortOptions { get; } = ["Era", "Name", "Owned count", "Refinement"];
+
+	/// <summary>Sort orders offered on the rivens tab.</summary>
+	public List<string> RivenSortOptions { get; } = ["Grade", "Weapon", "Disposition", "Rolls", "Mastery rank"];
+
 	private readonly string notifiedFissuresFile = Path.Combine(AppData.AppDataDir, "notified_fissures.txt");
 
 	private readonly HashSet<string> notifiedFissures = [];
@@ -41,30 +45,56 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	public DispatcherTimer fissureRefreshTimer = new() { Interval = TimeSpan.FromMinutes(2) };
 	public DispatcherTimer fissureUpdateTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
-	private CancellationTokenSource searchDebounce = new();
+	private readonly Debouncer itemsSearchDebounce = new();
+	private readonly Debouncer relicsSearchDebounce = new();
+	private readonly Debouncer rivensSearchDebounce = new();
 
 	private double itemsZoom = 1.0;
 	private const double ItemsZoomMin = 0.50;
 	private const double ItemsZoomMax = 2.00;
 	private const double ItemsZoomStep = 0.10;
-	public double ItemsTileWidth => Math.Round(200 * itemsZoom);
-	public double ItemsTileMinHeight => Math.Round(245 * itemsZoom);
 
-	public new event PropertyChangedEventHandler? PropertyChanged;
-	private void OnPropertyChanged([CallerMemberName] string? propertyName = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-	private bool isLoading;
+	// Styled properties rather than a hand-rolled INotifyPropertyChanged: Window already
+	// implements that interface, and shadowing it with a `new` event breaks notifications.
+	public static readonly StyledProperty<double> ItemsTileWidthProperty =
+		AvaloniaProperty.Register<MainWindow, double>(nameof(ItemsTileWidth), 200d);
+
+	public static readonly StyledProperty<double> ItemsTileMinHeightProperty =
+		AvaloniaProperty.Register<MainWindow, double>(nameof(ItemsTileMinHeight), 245d);
+
+	public static readonly StyledProperty<double> ItemsIconSizeProperty =
+		AvaloniaProperty.Register<MainWindow, double>(nameof(ItemsIconSize), 72d);
+
+	public static readonly StyledProperty<bool> IsLoadingProperty =
+		AvaloniaProperty.Register<MainWindow, bool>(nameof(IsLoading));
+
+	public double ItemsTileWidth
+	{
+		get => GetValue(ItemsTileWidthProperty);
+		set => SetValue(ItemsTileWidthProperty, value);
+	}
+
+	public double ItemsTileMinHeight
+	{
+		get => GetValue(ItemsTileMinHeightProperty);
+		set => SetValue(ItemsTileMinHeightProperty, value);
+	}
+
+	public double ItemsIconSize
+	{
+		get => GetValue(ItemsIconSizeProperty);
+		set => SetValue(ItemsIconSizeProperty, value);
+	}
+
 	public bool IsLoading
 	{
-		get => isLoading;
-		set {
-			if (isLoading != value) {
-				isLoading = value;
-				OnPropertyChanged();
-			}
-		}
+		get => GetValue(IsLoadingProperty);
+		set => SetValue(IsLoadingProperty, value);
 	}
 
 	private readonly WindowsKeyboardHook keyboardHook = new();
+	private Action<bool>? onProcessStateChanged;
+	private Action? onSelectionClosed;
 
 	public MainWindow()
 	{
@@ -74,61 +104,107 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		if (Design.IsDesignMode) {
 			return;
 		}
-		_ = InitializeAsync();
-		AppData.HttpClient.DefaultRequestHeaders.Add("User-Agent", "Framenion");
+
 		DataContext = this;
+		// Bound once; refreshes replace the contents in place.
 		ItemsList.ItemsSource = displayedItems;
-		FissuresList.ItemsSource = displayedFissures;
 		RelicsList.ItemsSource = displayedRelics;
+		RivensList.ItemsSource = displayedRivens;
+		FissuresList.ItemsSource = displayedFissures;
+		WireNotifications();
+		WireMonitorEvents();
+		_ = InitializeAsync();
+	}
 
-		AppData.Monitor?.OnProcessStateChanged += running => {
-			Dispatcher.UIThread.Post(() => {
-				if (running) {
-					WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "check_d.png"));
-					if (AppData.AppSettings.EnableEELogRead) {
-						AppData.Monitor.Start();
-					}
-					ToolTip.SetTip(WarframeOpened, "Warframe is up and running.");
-				} else {
-					WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "uncheck_d.png"));
-					ToolTip.SetTip(WarframeOpened, "Warframe is closed");
-					AppData.Monitor.Stop();
+	private static void WireNotifications()
+	{
+		Notify.Toast = (title, body) => ToastWindow.Show(title, body);
+		Notify.Error = (title, body) => MessageBox.Show(title, body);
+		Notify.Confirm = (title, body, ok, cancel) => MessageBox.AskYesNo(title, body, ok, cancel);
+	}
+
+	private void WireMonitorEvents()
+	{
+		if (AppData.Monitor == null) return;
+
+		onProcessStateChanged = running => Dispatcher.UIThread.Post(() => {
+			if (running) {
+				WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "check_d.png"));
+				ToolTip.SetTip(WarframeOpened, "Warframe is up and running.");
+				if (AppData.AppSettings.EnableEELogRead) {
+					AppData.Monitor.Start();
 				}
-			});
-		};
+			} else {
+				WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "uncheck_d.png"));
+				ToolTip.SetTip(WarframeOpened, "Warframe is closed");
+				AppData.Monitor.Stop();
+			}
+		});
 
-		AppData.Monitor?.OnRewardDetected += RelicRewardOCR.ReadRelicWindow;
+		onSelectionClosed = () => Dispatcher.UIThread.Post(() => {
+			foreach (var win in AppData.RewardWindows.ToArray()) {
+				if (win.IsVisible) win.Close();
+			}
+		});
 
-		AppData.Monitor?.OnSelectionClosed += () => {
-			_ = Dispatcher.UIThread.InvokeAsync(() => {
-				foreach (var win in AppData.RewardWindows.ToArray()) {
-					if (win.IsVisible) {
-						win.Close();
-					}
-				}
-			});
-		};
+		AppData.Monitor.OnProcessStateChanged += onProcessStateChanged;
+		AppData.Monitor.OnRewardDetected += RelicRewardOCR.ReadRelicWindow;
+		AppData.Monitor.OnSelectionClosed += onSelectionClosed;
+		AppData.Monitor.OnRivenSessionOpen += RivenReader.OnSessionOpen;
+		AppData.Monitor.OnRivenRolled += RivenReader.OnRolled;
+		AppData.Monitor.OnRivenSessionClose += RivenReader.OnSessionClose;
+	}
+
+	/// <summary>
+	/// The close button hides to the tray rather than quitting; Exit in the tray menu is the
+	/// only way out.
+	/// </summary>
+	protected override void OnClosing(WindowClosingEventArgs e)
+	{
+		if (!AppData.IsShuttingDown) {
+			e.Cancel = true;
+			Hide();
+			ToastWindow.Show("Framenion", "Running in the system tray");
+			return;
+		}
+
+		base.OnClosing(e);
 	}
 
 	protected override void OnClosed(EventArgs e)
 	{
 		base.OnClosed(e);
+
+		if (AppData.Monitor != null) {
+			if (onProcessStateChanged != null) AppData.Monitor.OnProcessStateChanged -= onProcessStateChanged;
+			AppData.Monitor.OnRewardDetected -= RelicRewardOCR.ReadRelicWindow;
+			if (onSelectionClosed != null) AppData.Monitor.OnSelectionClosed -= onSelectionClosed;
+			AppData.Monitor.OnRivenSessionOpen -= RivenReader.OnSessionOpen;
+			AppData.Monitor.OnRivenRolled -= RivenReader.OnRolled;
+			AppData.Monitor.OnRivenSessionClose -= RivenReader.OnSessionClose;
+		}
+
+		RivenOverlayWindow.CloseOverlay();
+
+		foreach (var win in AppData.RewardWindows.ToArray()) {
+			win.Close();
+		}
+
 		keyboardHook.Unhook();
 		fissureRefreshTimer?.Stop();
 		fissureUpdateTimer?.Stop();
-		if (AppData.PaddleEngine is IDisposable disposableEngine) {
-			disposableEngine.Dispose();
-		}
-		searchDebounce?.Cancel();
-		searchDebounce?.Dispose();
+		AppData.OcrEngine?.Dispose();
+		itemsSearchDebounce.Dispose();
+		relicsSearchDebounce.Dispose();
 		AppData.Monitor?.Dispose();
+		GameData.ClearBitmapCache();
+
 		if (Application.Current is { } app) {
 			var icons = TrayIcon.GetIcons(app);
 			if (icons != null) {
 				foreach (var icon in icons) {
 					(icon as IDisposable)?.Dispose();
 				}
-
 				icons.Clear();
 			}
 		}
@@ -150,246 +226,134 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			await LoadNotifiedFissures();
 			loadedFissureAlertList = FissureAlertList.Load();
 
-			fissureRefreshTimer.Tick += async (_, _) => {
-				await VoidFissure.LoadVoidFissures();
-				await RefreshFissuresList();
-			};
+			fissureRefreshTimer.Tick += OnFissureRefreshTick;
 			fissureUpdateTimer.Tick += (_, _) => UpdateFissureTimers();
 			fissureUpdateTimer.Start();
-			fissureRefreshTimer.Start();
 
-			FullOcrModel model = await OnlineFullModels.EnglishV4.DownloadAsync();
-			AppData.PaddleEngine = new(model, PaddleDevice.Onnx()) {
-				AllowRotateDetection = false,
-				Enable180Classification = false,
-			};
-			await InitializeDataInBackgroundAsync();
+			AppData.OcrEngine = await OcrEngineFactory.CreateAsync();
+			Log.Info($"OCR engine: {AppData.OcrEngine?.Name ?? "unavailable"}");
+
+			await LoadDataAsync();
+
+			// Only start polling once the region table is in place; a tick before that would
+			// drop every fissure as an unknown node.
+			fissureRefreshTimer.Start();
 		} catch (Exception ex) {
-			MessageBox.Show("Error", "Failed to initialize application: " + ex.Message);
+			Log.Error("Initialization failed.", ex);
+			MessageBox.Show("Error", $"Failed to initialize application: {ex.Message}\n\nSee {Log.Path}");
 		} finally {
 			IsLoading = false;
+			HookHotkey();
+		}
+	}
+
+	private void HookHotkey()
+	{
+		try {
 			keyboardHook.KeyEvent += key => {
-				if (key == Avalonia.Input.Key.PrintScreen) {
-					RelicRewardOCR.ReadRelicWindow();
+				switch (key) {
+					case Avalonia.Input.Key.PrintScreen:
+						RelicRewardOCR.ReadRelicWindow();
+						RivenReader.Rescan();
+						break;
 				}
 			};
 			keyboardHook.Hook();
+		} catch (Exception ex) {
+			Log.Warn("Could not install the global hotkeys; the overlays can still be triggered by the game log.", ex);
 		}
 	}
 
-	private async Task InitializeDataInBackgroundAsync()
+	/// <summary>
+	/// Downloads, parses and indexes the export on a worker thread. All of this used to run on
+	/// the dispatcher, which froze the window for the whole of startup.
+	/// </summary>
+	private async Task LoadDataAsync()
 	{
 		try {
-			await PublicExport.UpdateManifest();
-			await PublicExport.ParseExportManifest();
-			await PublicExport.ParseRegions();
-
-			await Dispatcher.UIThread.InvokeAsync(async () => {
-				await VoidFissure.LoadVoidFissures();
-				await RefreshFissuresList();
+			await Task.Run(async () => {
+				await PublicExport.SyncAsync();
+				await PublicExport.LoadAsync();
+				GameData.BuildIndexes();
+				await GameData.LoadWFMarketData(updateFile: false);
+				await GameData.BuildCatalogAsync();
 			});
 
-			foreach (var file in Directory.GetFiles(AppData.CacheDir)) {
-				await PublicExport.ParseFile(Path.GetFileName(file));
-			}
+			await VoidFissure.LoadVoidFissures();
+			await RefreshFissuresList();
 
-			await GameData.LoadExports();
-			await ParseInfo();
-			/*
-			string[] firstLoad = ["dict.en", "ExportRegions", "ExportMissionTypes", "ExportFactions"];
-			var loadTasks = firstLoad.Select(f => GameData.LoadFile(f, AppData.CacheDir, needsUpdate));
-			await Task.WhenAll(loadTasks);
-			await GameData.LoadWFMarketData(needsItemsUpdate);
-			string[] secondLoad = ["ExportWarframes", "ExportRecipes", "ExportWeapons", "ExportResources", "ExportMisc", "ExportSentinels", "ExportTextIcons", "ExportRelics", "ExportRewards"];
-			loadTasks = secondLoad.Select(f => GameData.LoadFile(f, AppData.CacheDir, needsUpdate));
-			await Task.WhenAll(loadTasks);
-
-			
-			
-			*/
-		} catch (Exception e) {
-			MessageBox.Show("Error", "Failed to initialize data in background: " + e.Message);
+			var summary = await Task.Run(Inventory.LoadAsync);
+			ApplyInventorySummary(summary);
+			RefreshItemsList();
+			RefreshRelicsList();
+			RefreshRivensList();
+		} catch (Exception ex) {
+			Log.Error("Failed to load game data.", ex);
+			MessageBox.Show("Error", $"Failed to load game data: {ex.Message}\n\nSee {Log.Path}");
 		}
 	}
 
-	private async Task ParseInfo()
+	private void ApplyInventorySummary(InventorySummary? summary)
 	{
-		if (!File.Exists(inventoryFile)) {
-			return;
+		if (summary == null) return;
+
+		PlatinumText.Text = summary.Platinum;
+		CreditsText.Text = summary.Credits;
+		MasteryText.Text = summary.Mastery;
+
+		// Routed through the shared cache so repeated refreshes do not leak a bitmap each time.
+		var mastery = GameData.GetOrCreateBitmap(summary.MasteryIconPath, 64);
+		if (mastery != null) MasteryIcon.Source = mastery;
+
+		var player = GameData.GetOrCreateBitmap(summary.PlayerIconPath, 64);
+		if (player != null) PlayerIcon.Source = player;
+	}
+
+	private async void OnFissureRefreshTick(object? sender, EventArgs e)
+	{
+		try {
+			await VoidFissure.LoadVoidFissures();
+			await RefreshFissuresList();
+		} catch (Exception ex) {
+			Log.Error("Fissure refresh failed.", ex);
 		}
-
-		string platinumText = "";
-		string creditsText = "";
-		string masteryText = "";
-		Bitmap? masteryIcon = null;
-		Bitmap? playerIcon = null;
-
-		await using var inventory = File.OpenRead(inventoryFile);
-		using var doc = await JsonDocument.ParseAsync(inventory);
-		var root = doc.RootElement;
-		if (root.ValueKind != JsonValueKind.Object) return;
-
-		if (root.TryGetProperty("PremiumCredits", out var platinum) && platinum.TryGetInt64(out var p)) {
-			platinumText = p.ToString("N0");
-		}
-		if (root.TryGetProperty("RegularCredits", out var credits) && credits.TryGetInt64(out var c)) {
-			creditsText = c.ToString("N0");
-		}
-
-		
-		root.TryGetProperty("PlayerLevel", out var mr);
-		var mr_str = (mr.GetUInt16() > 30) ? "L" + (mr.GetUInt16() - 30) : mr.ToString();
-		masteryText = mr_str;
-		using var textIconsStream = await AppData.GetStreamAsync("https://raw.githubusercontent.com/calamity-inc/warframe-public-export-plus/refs/heads/senpai/ExportTextIcons.json");
-		using var textIcons = await JsonDocument.ParseAsync(textIconsStream);
-		if (textIcons.RootElement.TryGetProperty($"RANK_{mr}", out var rank)) {
-			rank.TryGetProperty("DIT_AUTO", out var rankIcon);
-			await GameData.DownloadIconAsync($"https://browse.wf{rankIcon.ToString()}");
-			var rank_path = GameData.GetLocalIconPath(rankIcon.ToString());
-			masteryIcon = new Bitmap(rank_path);
-		}
-
-		root.TryGetProperty("ActiveAvatarImageType", out var icon_path);
-		GameData.ExportManifest.TryGetValue(icon_path.ToString(), out var icon);
-		if (icon != null) {
-			await GameData.DownloadIconAsync(icon);
-			var glyph_path = GameData.GetLocalIconPath(icon);
-			playerIcon = new Bitmap(glyph_path);
-		}
-
-		if (!root.TryGetProperty("MiscItems", out var miscEl) ||
-			!root.TryGetProperty("Recipes", out var recipesEl) ||
-			!root.TryGetProperty("XPInfo", out var xpInfoEl) ||
-			!root.TryGetProperty("MechSuits", out var mechEl) ||
-			!root.TryGetProperty("Suits", out var warframeEl) ||
-			!root.TryGetProperty("SpaceSuits", out var archwingsEl) ||
-			!root.TryGetProperty("LongGuns", out var primaryEl) ||
-			!root.TryGetProperty("Melee", out var meleeEl) ||
-			!root.TryGetProperty("Pistols", out var pistolsEl) ||
-			!root.TryGetProperty("SpaceGuns", out var archweaponsEl) ||
-			!root.TryGetProperty("SpaceMelee", out var archmeleeEl) ||
-			!root.TryGetProperty("Sentinels", out var sentinelsEl) ||
-			!root.TryGetProperty("SentinelWeapons", out var sentinelWeaponsEl) ||
-			!root.TryGetProperty("KubrowPets", out var petsEl)) return;
-
-		var xpByType = new Dictionary<string, long>(StringComparer.Ordinal);
-		foreach (var e in xpInfoEl.EnumerateArray())
-			if (e.TryGetProperty("ItemType", out var t) && e.TryGetProperty("XP", out var xp)
-				&& t.GetString() is string tStr && xp.ValueKind == JsonValueKind.Number)
-				xpByType[tStr] = xp.GetInt64();
-
-		var ownedTypes = new HashSet<string>(StringComparer.Ordinal);
-		foreach (var arr in new[] { warframeEl, mechEl, meleeEl, primaryEl, pistolsEl, archwingsEl, archweaponsEl, archmeleeEl, sentinelsEl, sentinelWeaponsEl, petsEl })
-			foreach (var e in arr.EnumerateArray())
-				if (e.TryGetProperty("ItemType", out var t) && t.GetString() is string tStr)
-					ownedTypes.Add(tStr);
-
-		var miscByType = new Dictionary<string, int>(StringComparer.Ordinal);
-		foreach (var e in miscEl.EnumerateArray())
-			if (e.TryGetProperty("ItemType", out var t) && t.GetString() is string tStr)
-				miscByType[tStr] = e.GetProperty("ItemCount").GetInt32();
-
-		var recipesByType = new Dictionary<string, int>(StringComparer.Ordinal);
-		foreach (var e in recipesEl.EnumerateArray()) {
-			if (e.TryGetProperty("ItemType", out var t) && t.GetString() is string tStr) {
-				recipesByType[tStr] = e.GetProperty("ItemCount").GetInt32();
-			}
-		}
-
-		foreach (var relic in GameData.RelicList) {
-			if (miscByType.TryGetValue(relic.Type, out var relicCount)) {
-				relic.OwnedCount = relicCount;
-			}
-		}
-
-		var ownedRelics = GameData.RelicList.Where(r => r.OwnedCount > 0);
-		foreach (var item in GameData.ItemsList) {
-			var resultType = item.Type;
-
-			xpByType.TryGetValue(resultType, out var xpForItem);
-			var requiredXp = GameData.XpToMaster(resultType);
-			if (xpForItem >= requiredXp) item.Mastered = true;
-			if (ownedTypes.Contains(resultType)) item.BorderColor = "#3aba29";
-
-			foreach (var ingred in item.Ingredients) {
-				var type = ingred.ItemType;
-				if (!miscByType.TryGetValue(type, out var ingred_count) && !recipesByType.TryGetValue(ingred.RecipeKey, out ingred_count)) {
-					if (ingred.Name.Contains("Prime")) {
-						foreach (var relic in ownedRelics) {
-							if (relic.Rewards.Any(r => r.Name.Contains(ingred.Name))) {
-								ingred.BorderColor = "#FFD700";
-								break;
-							}
-						}
-					}
-					continue;
-				}
-
-				ingred.OwnedCount = ingred_count;
-				if (!GameData.ExportRecipes.TryGetValue(type, out var subRecipe) || subRecipe.Ingredients == null) continue;
-				var subIngredients = subRecipe.Ingredients;
-				bool canCraft = true;
-				foreach (var sub in subIngredients) {
-					if (!miscByType.TryGetValue(sub.Type, out var subEntry) || subEntry < sub.Count) {
-						canCraft = false;
-						break;
-					}
-				}
-
-				if (canCraft && ingred.BackgroundColor == "#252525") {
-					ingred.BorderColor = "#4A9EFF";
-				}
-			}
-
-			if (item.Ingredients.Count > 0 && item.Ingredients.All(i => i.OwnedCount >= i.Count)) item.BorderColor = "#4A9EFF";
-		}
-
-		await Dispatcher.UIThread.InvokeAsync(() => {
-			PlatinumText.Text = platinumText;
-			CreditsText.Text = creditsText;
-			MasteryText.Text = masteryText;
-
-			if (masteryIcon != null) {
-				MasteryIcon.Source = masteryIcon;
-			}
-			if (playerIcon != null) {
-				PlayerIcon.Source = playerIcon;
-			}
-			RefreshItemsList();
-		});
 	}
 
 	private void UpdateFissureTimers()
 	{
 		var now = DateTime.UtcNow;
-		var expiredIds = new List<string>();
-		for (int i = displayedFissures.Count - 1; i >= 0; i--) {
-			var fissure = displayedFissures[i];
-			fissure.UpdateTimeRemaining();
 
-			if (fissure.Expiry <= now) {
-				expiredIds.Add(fissure.Id);
-				displayedFissures.RemoveAt(i);
-				GameData.Fissures.Remove(fissure);
+		// Prune the master list, not just the visible one: filtered-out fissures used to linger
+		// forever and reappear expired when the filter changed.
+		bool expired = false;
+		bool notifiedChanged = false;
+		for (int i = GameData.Fissures.Count - 1; i >= 0; i--) {
+			var fissure = GameData.Fissures[i];
+			if (fissure.Expiry > now) continue;
+
+			GameData.Fissures.RemoveAt(i);
+			notifiedChanged |= notifiedFissures.Remove(fissure.Id);
+			expired = true;
+		}
+
+		if (expired) {
+			for (int i = displayedFissures.Count - 1; i >= 0; i--) {
+				if (displayedFissures[i].Expiry <= now) displayedFissures.RemoveAt(i);
 			}
 		}
 
-		if (expiredIds.Count == 0) return;
-
-		bool removedAnyNotified = false;
-		foreach (var id in expiredIds) {
-			removedAnyNotified |= notifiedFissures.Remove(id);
+		foreach (var fissure in displayedFissures) {
+			fissure.UpdateTimeRemaining();
 		}
 
-		if (removedAnyNotified) {
-			_ = SaveNotifiedFissures();
-		}
+		if (notifiedChanged) _ = SaveNotifiedFissures();
 	}
 
 	private void RefreshItemsList()
 	{
-		displayedItems.Clear();
-		var filtered = GameData.ItemsList.AsEnumerable();
+		// GameData.ItemsList is sorted once when the catalogue is built, so filtering is all
+		// that is left to do per keystroke.
+		IEnumerable<Item> filtered = GameData.ItemsList;
 		filtered = currentItemsFilter switch {
 			"Warframes" => filtered.Where(r => r.Category == "Suits"),
 			"Primary" => filtered.Where(r => r.Category == "LongGuns"),
@@ -404,45 +368,136 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		};
 
 		if (!string.IsNullOrWhiteSpace(searchText)) {
-			filtered = filtered.Where(r => r.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase));
+			var query = searchText.Trim();
+			filtered = filtered.Where(r => r.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
 		}
 
-		filtered = filtered.OrderBy(r => r.Name);
-		foreach (var recipe in filtered) {
-			displayedItems.Add(recipe);
-		}
+		// Assigning in bulk raises a single Reset instead of a change per item.
+		displayedItems.Replace(filtered);
 	}
 
 	private void RefreshRelicsList()
 	{
-		displayedRelics.Clear();
-		var filtered = GameData.RelicList.AsEnumerable();
-		filtered = currentRelicsFilter switch {
-			"Lith" => filtered.Where(r => r.Era == "Lith"),
-			"Meso" => filtered.Where(r => r.Era == "Meso"),
-			"Neo" => filtered.Where(r => r.Era == "Meso"),
-			"Axi" => filtered.Where(r => r.Era == "Axi"),
-			"Requiem" => filtered.Where(r => r.Era == "Requiem"),
+		IEnumerable<Relic> filtered = GameData.RelicList;
+		if (currentRelicsFilter != "All") {
+			filtered = filtered.Where(r => string.Equals(r.Era, currentRelicsFilter, StringComparison.OrdinalIgnoreCase));
+		}
+
+		if (hideUnownedRelics) {
+			filtered = filtered.Where(r => r.OwnedCount > 0);
+		}
+
+		if (!string.IsNullOrWhiteSpace(searchRelicsText)) {
+			var query = searchRelicsText.Trim();
+			filtered = filtered.Where(r =>
+				r.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+				r.Rewards.Any(reward => reward.Name.Contains(query, StringComparison.OrdinalIgnoreCase)));
+		}
+
+		// GameData.RelicList is already in era order, so that case needs no re-sort.
+		filtered = (RelicSortBox?.SelectedItem as string) switch {
+			"Name" => filtered.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(r => GameData.GetRelicSortKey(r.Quality)),
+			"Owned count" => filtered.OrderByDescending(r => r.OwnedCount)
+				.ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+				.ThenBy(r => GameData.GetRelicSortKey(r.Quality)),
+			"Refinement" => filtered.OrderBy(r => GameData.GetRelicSortKey(r.Quality))
+				.ThenBy(r => VoidFissure.GetTierSortKey(r.Era))
+				.ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase),
 			_ => filtered,
 		};
 
-		if (!string.IsNullOrWhiteSpace(searchRelicsText)) {
-			var q = searchRelicsText.Trim();
+		displayedRelics.Replace(filtered);
+	}
 
+	private void OnToggleUnownedRelicsClick(object? sender, RoutedEventArgs e)
+	{
+		hideUnownedRelics = HideUnownedRelicsButton.IsChecked ?? false;
+		ToolTip.SetTip(HideUnownedRelicsButton, hideUnownedRelics ? "Show relics you do not own" : "Hide relics you do not own");
+		RefreshRelicsList();
+	}
+
+	/// <summary>
+	/// Rivens come from the inventory dump, not the export, so this list is empty until the
+	/// dump has been read; the count label doubles as the "nothing here" explanation.
+	/// </summary>
+	private void RefreshRivensList()
+	{
+		IEnumerable<OwnedRiven> filtered = GameData.RivenList;
+		if (currentRivensFilter != "All") {
+			filtered = filtered.Where(r => string.Equals(r.Category, currentRivensFilter, StringComparison.Ordinal));
+		}
+
+		if (!string.IsNullOrWhiteSpace(searchRivensText)) {
+			var query = searchRivensText.Trim();
 			filtered = filtered.Where(r =>
-				r.Name.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-				(r.Rewards?.Any(reward => reward.Name.Contains(q, StringComparison.OrdinalIgnoreCase)) ?? false));
+				r.WeaponName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+				r.RivenName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+				r.ClassName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+				r.Stats.Any(s => s.Name.Contains(query, StringComparison.OrdinalIgnoreCase)));
 		}
 
-		filtered = filtered.OrderBy(r => GameData.GetRelicSortKey(r.Quality)).ThenByDescending(r=> r.OwnedCount > 0);
-		foreach (var relic in filtered) {
-			displayedRelics.Add(relic);
+		// GameData.RivenList is already in weapon order, so that case needs no re-sort.
+		// Grade sorts on the roll position rather than the letter: the letter is a bucket, and
+		// a B+ at 74% should still come before a B+ at 51%.
+		filtered = (RivenSortBox?.SelectedItem as string) switch {
+			"Grade" => filtered.OrderByDescending(r => r.StatPerfectness)
+				.ThenBy(r => r.WeaponName, StringComparer.OrdinalIgnoreCase),
+			"Disposition" => filtered.OrderByDescending(r => r.Disposition)
+				.ThenBy(r => r.WeaponName, StringComparer.OrdinalIgnoreCase),
+			"Rolls" => filtered.OrderByDescending(r => r.Rerolls)
+				.ThenBy(r => r.WeaponName, StringComparer.OrdinalIgnoreCase),
+			"Mastery rank" => filtered.OrderByDescending(r => r.MasteryRank)
+				.ThenBy(r => r.WeaponName, StringComparer.OrdinalIgnoreCase),
+			_ => filtered,
+		};
+
+		var visible = filtered.ToList();
+		displayedRivens.Replace(visible);
+
+		RivenCountText.Text = GameData.RivenList.Count == 0
+			? "No rivens found — refresh the inventory"
+			: visible.Count == GameData.RivenList.Count
+				? $"{visible.Count} riven{(visible.Count == 1 ? "" : "s")}"
+				: $"{visible.Count} of {GameData.RivenList.Count}";
+	}
+
+	private void OnFilterRivenClick(object? sender, RoutedEventArgs e)
+	{
+		if (sender is not Button button) return;
+
+		foreach (var other in (Button[])[FilterAllRivensButton, FilterRifleRivensButton, FilterShotgunRivensButton,
+			FilterPistolRivensButton, FilterMeleeRivensButton, FilterArchgunRivensButton, FilterModularRivensButton]) {
+			other.Classes.Set("selected", false);
 		}
+
+		button.Classes.Set("selected", true);
+		currentRivensFilter = button.Tag?.ToString() ?? "All";
+		RefreshRivensList();
+	}
+
+	private void OnRivenSortChanged(object? sender, SelectionChangedEventArgs e)
+	{
+		// Fires while the window is still being built, before the list exists.
+		if (!IsLoaded) return;
+		RefreshRivensList();
+	}
+
+	private async void OnSearchRivensTextChanged(object? sender, TextChangedEventArgs e)
+	{
+		searchRivensText = RivensSearchBox.Text ?? string.Empty;
+		if (await rivensSearchDebounce.WaitAsync()) RefreshRivensList();
+	}
+
+	private void OnRelicSortChanged(object? sender, SelectionChangedEventArgs e)
+	{
+		// Fires while the window is still being built, before the list exists.
+		if (!IsLoaded) return;
+		RefreshRelicsList();
 	}
 
 	private async Task RefreshFissuresList()
 	{
-		displayedFissures.Clear();
 		var ordered = GameData.Fissures.Select(f => {
 			f.ShouldNotify = FissureAlertList.MatchesAny(f, loadedFissureAlertList);
 			return f;
@@ -450,6 +505,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		.ThenBy(f => VoidFissure.GetTierSortKey(f.Tier)).ToList();
 
 		var matches = new List<VoidFissure>();
+		var visible = new List<VoidFissure>();
 		foreach (var fissure in ordered) {
 			if (fissure.ShouldNotify && !notifiedFissures.Contains(fissure.Id)) {
 				notifiedFissures.Add(fissure.Id);
@@ -458,12 +514,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 			if (currentFissureFilter == "Normal" && fissure.IsHard) continue;
 			if (currentFissureFilter == "SteelPath" && !fissure.IsHard) continue;
-			displayedFissures.Add(fissure);
+			visible.Add(fissure);
 		}
+		displayedFissures.Replace(visible);
 
 		var activeIds = GameData.Fissures.Select(f => f.Id).ToHashSet(StringComparer.Ordinal);
 		bool pruned = notifiedFissures.RemoveWhere(id => !activeIds.Contains(id)) > 0;
-
 		if (matches.Count > 0 || pruned) {
 			await SaveNotifiedFissures();
 		}
@@ -471,10 +527,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		if (!AppData.AppSettings.EnableNotifications || matches.Count == 0) return;
 
 		var title = matches.Count == 1 ? "Fissure found" : $"{matches.Count} Fissures found";
-		var body = matches.Count == 1
-			? $"{(matches[0].IsHard ? "Steel Path" : "Normal")} {matches[0].MissionType} {matches[0].Tier} ends in {matches[0].TimeRemaining}"
-			: string.Join(Environment.NewLine, matches.Select(f => $"{(f.IsHard ? "Steel Path" : "Normal")} {f.MissionType} {f.Tier} ends in {f.TimeRemaining}"));
-
+		var body = string.Join(Environment.NewLine, matches.Select(f => $"{(f.IsHard ? "Steel Path" : "Normal")} {f.MissionType} {f.Tier} ends in {f.TimeRemaining}"));
 		ToastWindow.Show(title, body, duration: TimeSpan.FromSeconds(8), icon: GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "void_fissure.png")));
 	}
 
@@ -483,15 +536,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		try {
 			if (!File.Exists(notifiedFissuresFile)) return;
 
-			var lines = await File.ReadAllLinesAsync(notifiedFissuresFile);
-			foreach (var line in lines) {
+			foreach (var line in await File.ReadAllLinesAsync(notifiedFissuresFile)) {
 				var id = line.Trim();
-				if (!string.IsNullOrWhiteSpace(id)) {
-					notifiedFissures.Add(id);
-				}
+				if (!string.IsNullOrWhiteSpace(id)) notifiedFissures.Add(id);
 			}
-		} catch {
-			MessageBox.Show("Error", "Failed to load seen fissures list.");
+		} catch (Exception ex) {
+			Log.Warn("Could not load the seen fissures list.", ex);
 		}
 	}
 
@@ -500,43 +550,35 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		try {
 			var lines = notifiedFissures.OrderBy(x => x, StringComparer.Ordinal).ToArray();
 			await File.WriteAllLinesAsync(notifiedFissuresFile, lines);
-		} catch {
-			MessageBox.Show("Error", "Failed to save seen fissures list.");
+		} catch (Exception ex) {
+			Log.Warn("Could not save the seen fissures list.", ex);
 		}
 	}
 
-	private void OnItemsClick(object? sender, RoutedEventArgs e)
-	{
-		ItemsButton.Classes.Set("selected", true);
-		RelicsButton.Classes.Set("selected", false);
-		ItemsContent.IsVisible = true;
-		RelicsContent.IsVisible = false;
-		RefreshItemsList();
-	}
+	private void OnItemsClick(object? sender, RoutedEventArgs e) => SelectTab(ItemsButton);
 
-	private void OnRelicsClick(object? sender, RoutedEventArgs e)
+	private void OnRelicsClick(object? sender, RoutedEventArgs e) => SelectTab(RelicsButton);
+
+	private void OnRivensClick(object? sender, RoutedEventArgs e) => SelectTab(RivensButton);
+
+	private void SelectTab(Button selected)
 	{
-		ItemsButton.Classes.Set("selected", false);
-		RelicsButton.Classes.Set("selected", true);
-		ItemsContent.IsVisible = false;
-		RelicsContent.IsVisible = true;
-		RefreshRelicsList();
+		foreach (var (button, content) in (( Button, Border)[])[(ItemsButton, ItemsContent), (RelicsButton, RelicsContent), (RivensButton, RivensContent)]) {
+			bool active = ReferenceEquals(button, selected);
+			button.Classes.Set("selected", active);
+			content.IsVisible = active;
+		}
 	}
 
 	private void OnFilterClick(object? sender, RoutedEventArgs e)
 	{
 		if (sender is not Button button) return;
 
-		FilterAllButton.Classes.Set("selected", false);
-		FilterWarframesButton.Classes.Set("selected", false);
-		FilterPrimaryButton.Classes.Set("selected", false);
-		FilterSecondaryButton.Classes.Set("selected", false);
-		FilterMeleeButton.Classes.Set("selected", false);
-		FilterArchgunsButton.Classes.Set("selected", false);
-		FilterArchmeleeButton.Classes.Set("selected", false);
-		FilterVehiclesButton.Classes.Set("selected", false);
-		FilterCompanionsButton.Classes.Set("selected", false);
-		FilterAmpsButton.Classes.Set("selected", false);
+		foreach (var other in (Button[])[FilterAllButton, FilterWarframesButton, FilterPrimaryButton, FilterSecondaryButton,
+			FilterMeleeButton, FilterArchgunsButton, FilterArchmeleeButton, FilterVehiclesButton, FilterCompanionsButton, FilterAmpsButton]) {
+			other.Classes.Set("selected", false);
+		}
+
 		button.Classes.Set("selected", true);
 		currentItemsFilter = button.Tag?.ToString() ?? "All";
 		RefreshItemsList();
@@ -546,12 +588,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	{
 		if (sender is not Button button) return;
 
-		FilterAllRelicsButton.Classes.Set("selected", false);
-		FilterLithButton.Classes.Set("selected", false);
-		FilterMesoButton.Classes.Set("selected", false);
-		FilterNeoButton.Classes.Set("selected", false);
-		FilterAxiButton.Classes.Set("selected", false);
-		FilterRequiemButton.Classes.Set("selected", false);
+		foreach (var other in (Button[])[FilterAllRelicsButton, FilterLithButton, FilterMesoButton, FilterNeoButton, FilterAxiButton, FilterRequiemButton]) {
+			other.Classes.Set("selected", false);
+		}
+
 		button.Classes.Set("selected", true);
 		currentRelicsFilter = button.Tag?.ToString() ?? "All";
 		RefreshRelicsList();
@@ -559,40 +599,54 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 	private async void OnSearchTextChanged(object? sender, TextChangedEventArgs e)
 	{
-		searchDebounce?.Cancel();
-		searchDebounce?.Dispose();
-		searchDebounce = new CancellationTokenSource();
-
-		var token = searchDebounce.Token;
 		searchText = ItemsSearchBox.Text ?? string.Empty;
-
-		try {
-			await Task.Delay(TimeSpan.FromMilliseconds(200), token);
-		} catch (OperationCanceledException) {
-			return;
-		}
-
-		if (token.IsCancellationRequested) return;
-		RefreshItemsList();
+		if (await itemsSearchDebounce.WaitAsync()) RefreshItemsList();
 	}
 
 	private async void OnSearchRelicsTextChanged(object? sender, TextChangedEventArgs e)
 	{
-		searchDebounce?.Cancel();
-		searchDebounce?.Dispose();
-		searchDebounce = new CancellationTokenSource();
-
-		var token = searchDebounce.Token;
 		searchRelicsText = RelicsSearchBox.Text ?? string.Empty;
+		if (await relicsSearchDebounce.WaitAsync()) RefreshRelicsList();
+	}
 
-		try {
-			await Task.Delay(TimeSpan.FromMilliseconds(200), token);
-		} catch (OperationCanceledException) {
-			return;
+	/// <summary>
+	/// Collapses a burst of keystrokes into one refresh. Each search box owns an instance; a
+	/// single shared token source let typing in one box cancel the other's pending refresh.
+	/// </summary>
+	private sealed class Debouncer : IDisposable
+	{
+		private static readonly TimeSpan delay = TimeSpan.FromMilliseconds(200);
+
+		private CancellationTokenSource source = new();
+
+		public async Task<bool> WaitAsync()
+		{
+			var replacement = new CancellationTokenSource();
+			var previous = Interlocked.Exchange(ref source, replacement);
+			try {
+				previous.Cancel();
+				previous.Dispose();
+			} catch (ObjectDisposedException) {
+				// Already torn down.
+			}
+
+			try {
+				await Task.Delay(delay, replacement.Token);
+				return true;
+			} catch (OperationCanceledException) {
+				return false;
+			}
 		}
 
-		if (token.IsCancellationRequested) return;
-		RefreshRelicsList();
+		public void Dispose()
+		{
+			try {
+				source.Cancel();
+				source.Dispose();
+			} catch (ObjectDisposedException) {
+				// Already torn down.
+			}
+		}
 	}
 
 	private async void OnFissureFilterClick(object? sender, RoutedEventArgs e)
@@ -608,14 +662,30 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 	private async void OnRefreshFissuresClick(object? sender, RoutedEventArgs e)
 	{
-		await VoidFissure.LoadVoidFissures();
-		await RefreshFissuresList();
+		try {
+			await VoidFissure.LoadVoidFissures();
+			await RefreshFissuresList();
+		} catch (Exception ex) {
+			Log.Error("Manual fissure refresh failed.", ex);
+		}
 	}
 
 	private async void OnRefreshInfoClickAsync(object? sender, RoutedEventArgs e)
 	{
-		await GameData.ExtractGameInfo();
-		await ParseInfo();
+		try {
+			IsLoading = true;
+			await GameData.ExtractGameInfo();
+			var summary = await Task.Run(Inventory.LoadAsync);
+			ApplyInventorySummary(summary);
+			RefreshItemsList();
+			RefreshRelicsList();
+			RefreshRivensList();
+		} catch (Exception ex) {
+			Log.Error("Inventory refresh failed.", ex);
+			MessageBox.Show("Error", $"Failed to refresh inventory: {ex.Message}\n\nSee {Log.Path}");
+		} finally {
+			IsLoading = false;
+		}
 	}
 
 	private async void OnFilterListClick(object? sender, RoutedEventArgs e)
@@ -626,6 +696,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 			loadedFissureAlertList = FissureAlertList.Load();
 			await RefreshFissuresList();
 		} catch (Exception ex) {
+			Log.Error("Could not open the fissure alert settings.", ex);
 			MessageBox.Show("Error", "Failed to open Fissures Alert Settings: " + ex.Message);
 		}
 	}
@@ -633,9 +704,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 	private async void OnOpenSettingsClick(object? sender, RoutedEventArgs e)
 	{
 		try {
-			var w = new SettingsWindow();
-			await w.ShowDialog(this);
+			await new SettingsWindow().ShowDialog(this);
 		} catch (Exception ex) {
+			Log.Error("Could not open settings.", ex);
 			MessageBox.Show("Error", "Failed to open Settings: " + ex.Message);
 		}
 	}
@@ -646,26 +717,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		if (Math.Abs(newZoom - itemsZoom) < 0.0001) return;
 
 		itemsZoom = newZoom;
-
-		OnPropertyChanged(nameof(ItemsTileWidth));
-		OnPropertyChanged(nameof(ItemsTileMinHeight));
+		ItemsTileWidth = Math.Round(200 * itemsZoom);
+		ItemsTileMinHeight = Math.Round(245 * itemsZoom);
+		// The icon used to stay at a fixed size, so zooming only added whitespace.
+		ItemsIconSize = Math.Round(72 * itemsZoom);
 
 		ItemsList.InvalidateMeasure();
 		ItemsList.InvalidateArrange();
+		RelicsList.InvalidateMeasure();
+		RelicsList.InvalidateArrange();
 	}
 
-	private void OnItemsZoomOutClick(object? sender, RoutedEventArgs e)
-	{
-		SetItemsZoom(itemsZoom - ItemsZoomStep);
-	}
+	private void OnItemsZoomOutClick(object? sender, RoutedEventArgs e) => SetItemsZoom(itemsZoom - ItemsZoomStep);
 
-	private void OnItemsZoomResetClick(object? sender, RoutedEventArgs e)
-	{
-		SetItemsZoom(1.0);
-	}
+	private void OnItemsZoomResetClick(object? sender, RoutedEventArgs e) => SetItemsZoom(1.0);
 
-	private void OnItemsZoomInClick(object? sender, RoutedEventArgs e)
-	{
-		SetItemsZoom(itemsZoom + ItemsZoomStep);
-	}
+	private void OnItemsZoomInClick(object? sender, RoutedEventArgs e) => SetItemsZoom(itemsZoom + ItemsZoomStep);
 }

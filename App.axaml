@@ -2,11 +2,28 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="framenion.App"
              xmlns:local="using:framenion"
+             xmlns:src="using:framenion.Src"
              x:DataType="local:App"
              RequestedThemeVariant="Default">
     <Application.DataContext>
         <local:App />
     </Application.DataContext>
+
+    <!-- Tooltip bodies live here rather than inline in the item template: inline ToolTip.Tip
+         content is a concrete object built for every realized ingredient, not on hover. -->
+    <Application.DataTemplates>
+        <DataTemplate DataType="src:RecipeIngredient">
+            <StackPanel Orientation="Vertical" Spacing="5">
+                <TextBlock Text="{Binding CountName}" Foreground="{DynamicResource PrimaryForegroundBrush}"/>
+                <Grid ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto" RowSpacing="5" ColumnSpacing="5" IsVisible="{Binding IsPriceVisible}">
+                    <Image Grid.Column="0" Grid.Row="0" Source="avares://framenion/assets/platinum.png" Width="20" Height="20" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding Price}" Foreground="{DynamicResource PrimaryForegroundBrush}" VerticalAlignment="Center" FontWeight="Bold"/>
+                    <Image Grid.Column="0" Grid.Row="1" Source="avares://framenion/assets/ducats.png" Width="20" Height="20" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding Ducats}" Foreground="{DynamicResource PrimaryForegroundBrush}" VerticalAlignment="Center" FontWeight="Bold"/>
+                </Grid>
+            </StackPanel>
+        </DataTemplate>
+    </Application.DataTemplates>
 
     <Application.Resources>
         <SolidColorBrush x:Key="AppBackgroundBrush" Color="#1A1A1A"/>
@@ -24,6 +41,12 @@
         <SolidColorBrush x:Key="ButtonHoverForegroundBrush" Color="#CCCCCC"/>
 
         <SolidColorBrush x:Key="AccentBrush" Color="#4A9EFF"/>
+
+        <!-- Riven mod cards are violet in game, so the rivens tab follows suit. -->
+        <SolidColorBrush x:Key="RivenPanelBackgroundBrush" Color="#2C2C2C"/> <!-- #2A2139 -->
+        <SolidColorBrush x:Key="RivenTileBackgroundBrush" Color="#241A33"/>
+        <SolidColorBrush x:Key="RivenTileBorderBrush" Color="#6E45A8"/>
+        <SolidColorBrush x:Key="RivenIconBackgroundBrush" Color="#1B1327"/>
 
         <SolidColorBrush x:Key="PrimaryForegroundBrush" Color="White"/>
         <SolidColorBrush x:Key="SecondaryForegroundBrush" Color="#D0D0D0"/>
@@ -71,9 +94,11 @@
     </Application.Styles>
     <TrayIcon.Icons>
         <TrayIcons>
-            <TrayIcon Icon="assets\operator.ico" ToolTipText="Show/Hide Framenion" Command="{Binding ToggleWindow}">
+            <TrayIcon Icon="assets\operator.ico" ToolTipText="Framenion" Command="{Binding Open}">
                 <TrayIcon.Menu>
                     <NativeMenu>
+                        <NativeMenuItem Header="Open" Command="{Binding Open}"/>
+                        <NativeMenuItemSeparator/>
                         <NativeMenuItem Header="Exit" Command="{Binding Exit}"/>
                     </NativeMenu>
                 </TrayIcon.Menu>

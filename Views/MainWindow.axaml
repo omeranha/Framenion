@@ -6,6 +6,7 @@
         x:Class="framenion.MainWindow"
         xmlns:local="clr-namespace:framenion"
         xmlns:src="clr-namespace:framenion.Src"
+        xmlns:riven="clr-namespace:framenion.Src.Riven"
         x:Name="RootWindow"
         Title="Framenion - A Warframe companion app"
         Width="1280" Height="720"
@@ -19,6 +20,7 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
                     <Button Name="ItemsButton" Content="Equipment" Classes="selected" Click="OnItemsClick" Background="{DynamicResource SurfaceBackgroundBrush}" Padding="20,10"/>
                     <Button Name="RelicsButton" Content="Relics" Click="OnRelicsClick" Padding="20,10" Background="{DynamicResource SurfaceBackgroundBrush}"/>
+                    <Button Name="RivensButton" Content="Rivens" Click="OnRivensClick" Padding="20,10" Background="{DynamicResource SurfaceBackgroundBrush}"/>
                 </StackPanel>
 
                 <!-- Player Info Panel -->
@@ -205,14 +207,15 @@
                                                 <Grid RowDefinitions="Auto,Auto,Auto,*">
                                                     <!-- Main Icon -->
                                                     <Border Grid.Row="0"
-                                                            Width="72" Height="72"
+                                                            Width="{Binding #RootWindow.ItemsIconSize}"
+                                                            Height="{Binding #RootWindow.ItemsIconSize}"
                                                             HorizontalAlignment="Center"
                                                             Background="{DynamicResource AppBackgroundBrush}"
                                                             CornerRadius="4"
                                                             Margin="0,0,0,8"
                                                             BorderBrush="{DynamicResource ControlBorderBrush}"
                                                             BorderThickness="1">
-                                                        <Image Source="{Binding Icon}" Stretch="Uniform" Width="70" Height="70"/>
+                                                        <Image Source="{Binding Icon}" Stretch="Uniform"/>
                                                     </Border>
 
                                                     <StackPanel Grid.Row="0" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Top" IsVisible="{Binding IsPriceVisible}">
@@ -281,29 +284,8 @@
                                                                                Stretch="Uniform"
                                                                                Width="40" Height="40"
                                                                                HorizontalAlignment="Center"
-                                                                               VerticalAlignment="Center">
-                                                                               <ToolTip.Tip>
-                                                                                   <StackPanel Orientation="Vertical" Spacing="5">
-                                                                                       <TextBlock Text="{Binding CountName}" Foreground="{DynamicResource PrimaryForegroundBrush}"/>
-                                                                                       <Grid IsVisible="{Binding IsPriceVisible}">
-                                                                                           <Grid Grid.ColumnDefinitions="Auto,Auto" Grid.RowDefinitions="Auto,Auto" Grid.RowSpacing="5" Grid.ColumnSpacing="5">
-                                                                                               <Image Grid.Column="0" Grid.Row="0" Source="avares://framenion/assets/platinum.png" Width="20" Height="20" VerticalAlignment="Center"/>
-                                                                                               <TextBlock Grid.Column="1" Grid.Row="0"
-                                                                                                          Text="{Binding Price}"
-                                                                                                          Foreground="{DynamicResource PrimaryForegroundBrush}"
-                                                                                                          VerticalAlignment="Center"
-                                                                                                          FontWeight="Bold"/>
-                                                                                               <Image Grid.Column="0" Grid.Row="1" Source="avares://framenion/assets/ducats.png" Width="20" Height="20" VerticalAlignment="Center"/>
-                                                                                               <TextBlock Grid.Column="1" Grid.Row="1"
-                                                                                                          Text="{Binding Ducats}"
-                                                                                                          Foreground="{DynamicResource PrimaryForegroundBrush}"
-                                                                                                          VerticalAlignment="Center"
-                                                                                                          FontWeight="Bold"/>
-                                                                                           </Grid>
-                                                                                       </Grid>
-                                                                                   </StackPanel>
-                                                                               </ToolTip.Tip>
-                                                                        </Image>
+                                                                               VerticalAlignment="Center"
+                                                                               ToolTip.Tip="{Binding}"/>
 
                                                                         <TextBlock Text="{Binding OwnedCount}"
                                                                                    Foreground="{DynamicResource PrimaryForegroundBrush}"
@@ -334,9 +316,9 @@
                 <!-- Relics Content -->
                 <Border Name="RelicsContent" IsVisible="False" Padding="20">
                     <Grid RowDefinitions="Auto,Auto,*">
-                        <Grid Grid.Row="0" ColumnDefinitions="*,40,40,40,200" Margin="0,0,0,20">
+                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,40,40,40,200" Margin="0,0,0,20">
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Name="FilterAllRelicsButton" Click="OnFilterClick"
+                                <Button Name="FilterAllRelicsButton" Click="OnFilterRelicClick"
                                         Tag="All"
                                         Classes="selected"
                                         Padding="8,8"
@@ -381,28 +363,48 @@
                                 </Button>
                             </StackPanel>
 
-                        <Button Grid.Column="1"
+                        <ToggleButton Grid.Column="1"
+                                      Name="HideUnownedRelicsButton"
+                                      Click="OnToggleUnownedRelicsClick"
+                                      Padding="8,8"
+                                      Margin="0,0,8,0"
+                                      VerticalAlignment="Center"
+                                      ToolTip.Tip="Hide relics you do not own">
+                            <Image Source="avares://framenion/assets/eye.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                        </ToggleButton>
+
+                        <ComboBox Grid.Column="2"
+                                  Name="RelicSortBox"
+                                  ItemsSource="{Binding #RootWindow.RelicSortOptions}"
+                                  SelectedIndex="0"
+                                  SelectionChanged="OnRelicSortChanged"
+                                  MinWidth="150"
+                                  Margin="0,0,8,0"
+                                  VerticalAlignment="Center"
+                                  ToolTip.Tip="Sort relics"/>
+
+                        <Button Grid.Column="3"
                 Content="−"
                 Click="OnItemsZoomOutClick"
                 Classes="iconButton"
                 ToolTip.Tip="Zoom out"
                 Padding="10,6"/>
 
-        <Button Grid.Column="2"
+        <Button Grid.Column="4"
                 Content="%"
                 Click="OnItemsZoomResetClick"
                 Classes="iconButton"
                 ToolTip.Tip="Reset zoom"
                 Padding="10,6"/>
 
-        <Button Grid.Column="3"
+        <Button Grid.Column="5"
                 Content="+"
                 Click="OnItemsZoomInClick"
                 Classes="iconButton"
                 ToolTip.Tip="Zoom in"
                 Padding="10,6"/>
 
-                            <TextBox Grid.Column="4"
+                            <TextBox Grid.Column="6"
                                      Name="RelicsSearchBox"
                                      PlaceholderText="Search relics or rewards"
                                      Padding="8,8"
@@ -452,7 +454,8 @@
                                                                Source="avares://framenion/assets/eye.png">
                                                         </Image>
                                                         <Border Grid.Row="0" Grid.Column="1"
-                                                                Width="72" Height="72"
+                                                                Width="{Binding #RootWindow.ItemsIconSize}"
+                                                                Height="{Binding #RootWindow.ItemsIconSize}"
                                                                 HorizontalAlignment="Center"
                                                                 VerticalAlignment="Center"
                                                                 Background="{DynamicResource AppBackgroundBrush}"
@@ -463,7 +466,6 @@
                                                             <Image Grid.Column="1"
                                                                    Source="{Binding Icon}"
                                                                    Stretch="Uniform"
-                                                                   Width="70" Height="70"
                                                                    HorizontalAlignment="Center"
                                                                    VerticalAlignment="Center"/>
                                                         </Border>
@@ -480,6 +482,11 @@
                                                                    Foreground="{DynamicResource PrimaryForegroundBrush}"
                                                                    FontWeight="SemiBold"
                                                                    TextWrapping="Wrap"
+                                                                   TextAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Quality}"
+                                                                   Foreground="{DynamicResource SecondaryForegroundBrush}"
+                                                                   FontSize="11"
                                                                    TextAlignment="Center"
                                                                    VerticalAlignment="Center"/>
                                                     </StackPanel>
@@ -512,7 +519,7 @@
                                                                                Width="40" Height="40"
                                                                                HorizontalAlignment="Center"
                                                                                VerticalAlignment="Center"
-                                                                               ToolTip.Tip="{Binding Name}"/>
+                                                                               ToolTip.Tip="{Binding CountName}"/>
                                                                     </Border>
                                                                 </Border>
                                                             </DataTemplate>
@@ -526,6 +533,191 @@
                             </ScrollViewer>
                         </Border>
                         </Grid>
+                </Border>
+            </Grid>
+
+            <Grid Grid.Column="0">
+                <!-- Rivens Content -->
+                <Border Name="RivensContent" IsVisible="False" Padding="20">
+                    <Grid RowDefinitions="Auto,Auto,*">
+                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,40,40,40,200" Margin="0,0,0,20">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Name="FilterAllRivensButton" Click="OnFilterRivenClick" Tag="All" Classes="selected" Padding="8,8" ToolTip.Tip="All">
+                                    <Image Source="avares://framenion/assets/all.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                </Button>
+                                <Button Name="FilterRifleRivensButton" Click="OnFilterRivenClick" Tag="Rifle" Padding="8,8" ToolTip.Tip="Rifle">
+                                    <Image Source="avares://framenion/assets/primary.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                </Button>
+                                <Button Name="FilterShotgunRivensButton" Click="OnFilterRivenClick" Tag="Shotgun" Padding="8,8" ToolTip.Tip="Shotgun">
+                                    <Image Source="avares://framenion/assets/shotguns.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                </Button>
+                                <Button Name="FilterPistolRivensButton" Click="OnFilterRivenClick" Tag="Pistol" Padding="8,8" ToolTip.Tip="Pistol">
+                                    <Image Source="avares://framenion/assets/pistols.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                </Button>
+                                <Button Name="FilterMeleeRivensButton" Click="OnFilterRivenClick" Tag="Melee" Padding="8,8" ToolTip.Tip="Melee">
+                                    <Image Source="avares://framenion/assets/melee.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                </Button>
+                                <Button Name="FilterArchgunRivensButton" Click="OnFilterRivenClick" Tag="Archgun" Padding="8,8" ToolTip.Tip="Archgun">
+                                    <Image Source="avares://framenion/assets/archguns.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                </Button>
+                                <Button Name="FilterModularRivensButton" Click="OnFilterRivenClick" Tag="Modular" Padding="8,8" ToolTip.Tip="Modular (Zaws and Kitguns)">
+                                    <Image Source="avares://framenion/assets/modular.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                </Button>
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="1"
+                                       Name="RivenCountText"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,12,0"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+
+                            <ComboBox Grid.Column="2"
+                                      Name="RivenSortBox"
+                                      ItemsSource="{Binding #RootWindow.RivenSortOptions}"
+                                      SelectedIndex="0"
+                                      SelectionChanged="OnRivenSortChanged"
+                                      MinWidth="150"
+                                      Margin="0,0,8,0"
+                                      VerticalAlignment="Center"
+                                      ToolTip.Tip="Sort rivens"/>
+
+                            <Button Grid.Column="3" Content="−" Click="OnItemsZoomOutClick" Classes="iconButton" ToolTip.Tip="Zoom out" Padding="10,6"/>
+                            <Button Grid.Column="4" Content="%" Click="OnItemsZoomResetClick" Classes="iconButton" ToolTip.Tip="Reset zoom" Padding="10,6"/>
+                            <Button Grid.Column="5" Content="+" Click="OnItemsZoomInClick" Classes="iconButton" ToolTip.Tip="Zoom in" Padding="10,6"/>
+
+                            <TextBox Grid.Column="6"
+                                     Name="RivensSearchBox"
+                                     PlaceholderText="Search weapon or stat"
+                                     Padding="8,8"
+                                     TextChanged="OnSearchRivensTextChanged"
+                                     VerticalAlignment="Center"
+                                     Background="{DynamicResource PanelBackgroundBrush}"
+                                     Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                     BorderBrush="{DynamicResource ControlBorderBrush}"
+                                     BorderThickness="1"
+                                     CornerRadius="4"/>
+                        </Grid>
+
+                        <Border Grid.Row="2"
+                                Background="{DynamicResource RivenPanelBackgroundBrush}"
+                                CornerRadius="8"
+                                BorderBrush="{DynamicResource RivenTileBorderBrush}"
+                                BorderThickness="1">
+
+                            <ScrollViewer Name="RivensScrollViewer"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsRepeater Name="RivensList">
+                                    <ItemsRepeater.Layout>
+                                        <WrapLayout Orientation="Horizontal"/>
+                                    </ItemsRepeater.Layout>
+
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate x:DataType="riven:OwnedRiven">
+                                            <Border Background="{DynamicResource RivenTileBackgroundBrush}"
+                                                    CornerRadius="6"
+                                                    Margin="8"
+                                                    Padding="12"
+                                                    Width="{Binding #RootWindow.ItemsTileWidth}"
+                                                    MinHeight="{Binding #RootWindow.ItemsTileMinHeight}"
+                                                    BorderBrush="{DynamicResource RivenTileBorderBrush}"
+                                                    BorderThickness="2">
+
+                                                <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+                                                    <!-- Weapon icon and overall grade -->
+                                                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                                                        <Border Grid.Column="0"
+                                                                Width="{Binding #RootWindow.ItemsIconSize}"
+                                                                Height="{Binding #RootWindow.ItemsIconSize}"
+                                                                HorizontalAlignment="Center"
+                                                                Background="{DynamicResource RivenIconBackgroundBrush}"
+                                                                CornerRadius="4"
+                                                                Margin="0,0,0,8"
+                                                                BorderBrush="{DynamicResource RivenTileBorderBrush}"
+                                                                BorderThickness="1">
+                                                            <Image Source="{Binding Icon}" Stretch="Uniform"/>
+                                                        </Border>
+
+                                                        <Border Grid.Column="1"
+                                                                Background="{Binding OverallGrade, Converter={x:Static local:RivenOverlayWindow.GradeBrushConverter}}"
+                                                                CornerRadius="4"
+                                                                Padding="9,2"
+                                                                VerticalAlignment="Top"
+                                                                IsVisible="{Binding HasGrade}">
+                                                            <TextBlock Text="{Binding OverallGrade}"
+                                                                       FontSize="16"
+                                                                       FontWeight="Bold"
+                                                                       Foreground="#101010"/>
+                                                        </Border>
+                                                    </Grid>
+
+                                                    <TextBlock Grid.Row="1"
+                                                               Text="{Binding WeaponName}"
+                                                               Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                                               FontWeight="SemiBold"
+                                                               TextWrapping="Wrap"
+                                                               TextAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+
+                                                    <TextBlock Grid.Row="2"
+                                                               Text="{Binding Subtitle}"
+                                                               Foreground="{DynamicResource SecondaryForegroundBrush}"
+                                                               FontSize="11"
+                                                               TextAlignment="Center"
+                                                               HorizontalAlignment="Center"
+                                                               Margin="0,2,0,8"/>
+
+                                                    <!-- Stats -->
+                                                    <ItemsControl Grid.Row="3" ItemsSource="{Binding Stats}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="riven:GradedRivenStat">
+                                                                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,3">
+                                                                    <TextBlock Grid.Column="0"
+                                                                               Text="{Binding DisplayValue}"
+                                                                               MinWidth="48"
+                                                                               FontWeight="Bold"
+                                                                               FontSize="11"
+                                                                               Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                                                               VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Column="1"
+                                                                               Text="{Binding Name}"
+                                                                               FontSize="11"
+                                                                               TextWrapping="Wrap"
+                                                                               Margin="4,0,4,0"
+                                                                               Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                                                               VerticalAlignment="Center"/>
+                                                                    <Border Grid.Column="2"
+                                                                            Background="{Binding Grade, Converter={x:Static local:RivenOverlayWindow.GradeBrushConverter}}"
+                                                                            CornerRadius="3"
+                                                                            Padding="5,1"
+                                                                            VerticalAlignment="Center">
+                                                                        <TextBlock Text="{Binding Grade}"
+                                                                                   FontSize="10"
+                                                                                   FontWeight="Bold"
+                                                                                   Foreground="#101010"/>
+                                                                    </Border>
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+
+                                                    <TextBlock Grid.Row="4"
+                                                               Text="{Binding Footer}"
+                                                               Foreground="{DynamicResource SecondaryForegroundBrush}"
+                                                               FontSize="10"
+                                                               TextWrapping="Wrap"
+                                                               TextAlignment="Center"
+                                                               HorizontalAlignment="Center"
+                                                               Margin="0,8,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
                 </Border>
             </Grid>
 

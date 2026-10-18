@@ -4,7 +4,6 @@ using framenion.Src;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -25,23 +24,24 @@ public partial class FissuresAlert : Window
 		InitializeComponent();
 		DataContext = this;
 		WindowStartupLocation = WindowStartupLocation.CenterOwner;
-		var culture = new CultureInfo("en-US", false).TextInfo;
-		var missionNames = GameData.ExportMissionTypes.Values.Select(el => {
-			try {
-				string nameKey = el;
-				return GameData.Lang.TryGetValue(nameKey, out var v) ? culture.ToTitleCase(v.ToLower()) : nameKey;
-			} catch { return string.Empty; }
-		}).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList();
-		var planetNames = GameData.ExportRegions.Values.Select(el => {
-			try {
-				var systemName = el.SystemName;
-				return GameData.Lang.TryGetValue(systemName, out var v) ? v : systemName;
-			} catch { return string.Empty; }
-		}).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.Ordinal).OrderBy(s => s).ToList();
+
+		// Mission and planet names come straight from the official region table, which is
+		// already localized; the old language-dictionary lookup no longer exists.
+		var missionNames = GameData.ExportRegions.Values
+			.Select(region => VoidFissure.GetMissionType(region.MissionIndex))
+			.Where(name => name != "Unknown")
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
+
+		var planetNames = GameData.ExportRegions.Values
+			.Select(region => region.SystemName?.Trim() ?? string.Empty)
+			.Where(name => !string.IsNullOrWhiteSpace(name))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
 
 		MissionTypes.AddRange(missionNames);
 		Planets.AddRange(planetNames);
-		FissureTypes.AddRange([.. GameData.relicType.Values.Select(v => v.Item1).Distinct()]);
+		FissureTypes.AddRange(GameData.relicType.Values.Select(v => v.name).Distinct(StringComparer.Ordinal));
 
 		LoadFilters();
 	}
@@ -73,7 +73,7 @@ public partial class FissuresAlert : Window
 				});
 			}
 		} catch (Exception ex) {
-			Console.WriteLine("Failed to load fissure filters: " + ex.Message);
+			Log.Warn("Failed to load fissure filters.", ex);
 		}
 	}
 
@@ -81,26 +81,30 @@ public partial class FissuresAlert : Window
 	{
 		var originalBackground = SaveButton.Background;
 		try {
-			using var fs = File.Create(dataFilePath);
-			var options = new JsonWriterOptions { Indented = true };
-			using var writer = new Utf8JsonWriter(fs, options);
-			writer.WriteStartArray();
-			foreach (var f in Filters) {
-				writer.WriteStartObject();
-				writer.WriteString("type", f.Type ?? string.Empty);
-				writer.WriteString("relic_tier", f.RelicTier ?? string.Empty);
-				writer.WriteString("planet", f.Planet ?? string.Empty);
-				writer.WriteString("mode", f.Mode ?? string.Empty);
-				writer.WriteEndObject();
+			await using (var fs = File.Create(dataFilePath)) {
+				await using var writer = new Utf8JsonWriter(fs, new JsonWriterOptions { Indented = true });
+				writer.WriteStartArray();
+				foreach (var f in Filters) {
+					writer.WriteStartObject();
+					writer.WriteString("type", f.Type ?? string.Empty);
+					writer.WriteString("relic_tier", f.RelicTier ?? string.Empty);
+					writer.WriteString("planet", f.Planet ?? string.Empty);
+					writer.WriteString("mode", f.Mode ?? string.Empty);
+					writer.WriteEndObject();
+				}
+				writer.WriteEndArray();
+				await writer.FlushAsync();
 			}
-			writer.WriteEndArray();
-			writer.Flush();
+
 			SaveButton.Content = "Saved";
-			SaveButton.Background = Brush.Parse("#33cc33");
+			SaveButton.Background = Brushes.LimeGreen;
 			await Task.Delay(2000);
+			// The window can be closed while the confirmation is showing.
+			if (!IsVisible) return;
 			SaveButton.Content = "Save";
 			SaveButton.Background = originalBackground;
 		} catch (Exception ex) {
+			Log.Error("Failed to save fissure filters.", ex);
 			MessageBox.Show("Error", "Failed to save filters: " + ex.Message);
 		}
 	}

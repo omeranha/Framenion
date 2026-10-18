@@ -56,7 +56,7 @@ public partial class ToastWindow : Window
 			var owner = AppData.MainWindow;
 			if (owner == null) return;
 
-			duration ??= TimeSpan.FromSeconds(5);
+			duration ??= TimeSpan.FromSeconds(3);
 
 			var toast = new ToastWindow(title, body, icon);
 			toast.Opened += async (_, _) => {
@@ -72,8 +72,8 @@ public partial class ToastWindow : Window
 			toast.Closed += (_, _) => {
 				lock (activeToasts) {
 					activeToasts.Remove(toast);
-					foreach (var toast in activeToasts) {
-						toast.ApplyStackedPosition(anchor ?? ToastAnchor.BottomRight);
+					foreach (var remaining in activeToasts) {
+						remaining.ApplyStackedPosition(anchor ?? ToastAnchor.BottomRight);
 					}
 				}
 			};
