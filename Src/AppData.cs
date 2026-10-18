@@ -28,6 +28,9 @@ public class AppData
 	public static IOcrEngine? OcrEngine { get; set; }
 	public static WarframeMonitor? Monitor { get; } = new();
 
+	/// <summary>Shared so the settings window can record a new binding against the live hook.</summary>
+	public static WindowsKeyboardHook KeyboardHook { get; } = new();
+
 	public static AppSettings AppSettings { get; set; } = new();
 
 	/// <summary>Set when the user picks Exit, so closing the window stops hiding it to the tray.</summary>

@@ -92,7 +92,6 @@ public partial class MainWindow : Window
 		set => SetValue(IsLoadingProperty, value);
 	}
 
-	private readonly WindowsKeyboardHook keyboardHook = new();
 	private Action<bool>? onProcessStateChanged;
 	private Action? onSelectionClosed;
 
@@ -190,7 +189,8 @@ public partial class MainWindow : Window
 			win.Close();
 		}
 
-		keyboardHook.Unhook();
+		AppData.KeyboardHook.HotkeyPressed -= OnHotkeyPressed;
+		AppData.KeyboardHook.Unhook();
 		fissureRefreshTimer?.Stop();
 		fissureUpdateTimer?.Stop();
 		AppData.OcrEngine?.Dispose();
@@ -247,21 +247,28 @@ public partial class MainWindow : Window
 		}
 	}
 
+	/// <summary>
+	/// Installs the single global hotkey. One key triggers both scans: they are independently
+	/// guarded and each no-ops when its overlay is off, so whichever screen is actually open
+	/// gets read without the user having to remember two bindings.
+	/// </summary>
 	private void HookHotkey()
 	{
 		try {
-			keyboardHook.KeyEvent += key => {
-				switch (key) {
-					case Avalonia.Input.Key.PrintScreen:
-						RelicRewardOCR.ReadRelicWindow();
-						RivenReader.Rescan();
-						break;
-				}
-			};
-			keyboardHook.Hook();
+			var hook = AppData.KeyboardHook;
+			hook.Hotkey = AppData.AppSettings.Hotkey;
+			hook.HotkeyPressed += OnHotkeyPressed;
+			hook.Hook();
+			Log.Info($"Scan hotkey: {WindowsKeyboardHook.Describe(hook.Hotkey)}");
 		} catch (Exception ex) {
-			Log.Warn("Could not install the global hotkeys; the overlays can still be triggered by the game log.", ex);
+			Log.Warn("Could not install the global hotkey; the overlays can still be triggered by the game log.", ex);
 		}
+	}
+
+	private static void OnHotkeyPressed()
+	{
+		RelicRewardOCR.ReadRelicWindow();
+		RivenReader.Rescan();
 	}
 
 	/// <summary>

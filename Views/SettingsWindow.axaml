@@ -37,11 +37,24 @@
             <CheckBox Name="EnableRelicOverlayBox"
                       Content="Enable relic reward overlay"
                       Foreground="{DynamicResource SecondaryForegroundBrush}"
-                      ToolTip.Tip="Enable OCR for relic rewards.&#x0a;The OCR will run automatically if EE log reading is enabled or by pressing printscreen key at any moment."/>
+                      ToolTip.Tip="Enable OCR for relic rewards.&#x0a;The OCR will run automatically if EE log reading is enabled, or on the scan hotkey below."/>
             <CheckBox Name="EnableRivenOverlayBox"
                       Content="Enable riven reader overlay"
                       Foreground="{DynamicResource SecondaryForegroundBrush}"
-                      ToolTip.Tip="Read and grade riven mods on the Kuva reroll screen.&#x0a;Runs automatically if EE log reading is enabled, or on the manual rescan hotkey."/>
+                      ToolTip.Tip="Read and grade riven mods on the Kuva reroll screen.&#x0a;Runs automatically if EE log reading is enabled, or on the scan hotkey below."/>
+            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="10">
+                <TextBlock Grid.Column="0"
+                           Text="Scan hotkey:"
+                           Foreground="{DynamicResource SecondaryForegroundBrush}"
+                           VerticalAlignment="Center"
+                           ToolTip.Tip="One key reads both the relic rewards and the riven card on screen.&#x0a;The key is swallowed, so Windows and the game will not also act on it."/>
+                <Button Grid.Column="1"
+                        Name="HotkeyButton"
+                        Click="OnHotkeyClick"
+                        MinWidth="130"
+                        Padding="14,7"
+                        ToolTip.Tip="Click, then press the key to bind. Escape keeps the current one."/>
+            </Grid>
             <Grid ColumnDefinitions="Auto, Auto, auto, auto" ColumnSpacing="10">
                 <TextBlock Grid.Column="0" Text="UI scale (%):" Foreground="{DynamicResource SecondaryForegroundBrush}" VerticalAlignment="Center" ToolTip.Tip="Insert Warframe UI scale value"/>
                 <NumericUpDown Grid.Column="1" Name="UiScaleNumeric" Minimum="50" Maximum="100" ShowButtonSpinner="False"/>

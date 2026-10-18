@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Input;
 using Avalonia.Media;
 using System;
 using System.IO;
@@ -19,6 +20,9 @@ public sealed class AppSettings
 	public int UIScale { get; set; } = 100;
 	public bool DebugOCR { get; set; } = false;
 	public int OverlayOffset { get; set; } = 200;
+
+	/// <summary>Key that triggers a scan. Swallowed when pressed, so nothing else reacts to it.</summary>
+	public Key Hotkey { get; set; } = Key.PrintScreen;
 
 	/// <summary>Optional per-screen overrides; null entries keep the measured defaults.</summary>
 	public ScanRegions Regions { get; set; } = new();
@@ -72,8 +76,25 @@ public sealed class AppSettings
 		settings.UIScale = ReadInt(root, "uiScale", settings.UIScale);
 		settings.DebugOCR = ReadBool(root, "debugOCR", settings.DebugOCR);
 		settings.OverlayOffset = ReadInt(root, "overlayOffset", settings.OverlayOffset);
+		settings.Hotkey = ReadHotkey(root, "hotkey", settings.Hotkey);
 		settings.Regions = ScanRegions.Read(root);
 		return settings;
+	}
+
+	/// <summary>
+	/// Stored by name so the file stays readable and survives a reordering of Avalonia's Key
+	/// enum. An unknown name falls back to the default rather than leaving the app with no
+	/// working hotkey.
+	/// </summary>
+	private static Key ReadHotkey(JsonElement root, string property, Key fallback)
+	{
+		if (!root.TryGetProperty(property, out var p) || p.ValueKind != JsonValueKind.String) return fallback;
+		if (p.GetString() is not string name || name.Length == 0) return fallback;
+
+		if (Enum.TryParse<Key>(name, ignoreCase: true, out var key) && key != Key.None) return key;
+
+		Log.Warn($"Unknown hotkey '{name}' in settings; keeping {WindowsKeyboardHook.Describe(fallback)}.");
+		return fallback;
 	}
 
 	public async Task SaveAsync()
@@ -92,6 +113,7 @@ public sealed class AppSettings
 		writer.WriteNumber("uiScale", UIScale);
 		writer.WriteBoolean("debugOCR", DebugOCR);
 		writer.WriteNumber("overlayOffset", OverlayOffset);
+		writer.WriteString("hotkey", Hotkey.ToString());
 		Regions.Write(writer);
 		writer.WriteEndObject();
 

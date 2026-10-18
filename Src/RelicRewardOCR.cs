@@ -1,21 +1,28 @@
 using framenion.Src.Ocr;
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace framenion.Src;
 
 public class RelicRewardOCR
 {
-	public static bool OcrRunning { get; set; } = false;
+	/// <summary>
+	/// Claimed atomically: the hotkey and the log monitor can both ask for a scan at the same
+	/// moment, and a plain check-then-set let two of them past before either had claimed it.
+	/// </summary>
+	private static int running;
+
+	public static bool OcrRunning => Volatile.Read(ref running) == 1;
 
 	public static void ReadRelicWindow()
 	{
-		if (!AppData.AppSettings.EnableRelicOverlay || OcrRunning) return;
+		if (!AppData.AppSettings.EnableRelicOverlay) return;
+		if (Interlocked.Exchange(ref running, 1) == 1) return;
 
 		_ = Task.Run(async () => {
 			try {
-				OcrRunning = true;
 				await Task.Delay(500);
 
 				var engine = AppData.OcrEngine;
@@ -48,7 +55,7 @@ public class RelicRewardOCR
 				Log.Error("[Rewards] Scan failed.", ex);
 				Notify.Error("Error", $"Failed to read rewards: {ex.Message}\n\nSee {Log.Path}");
 			} finally {
-				OcrRunning = false;
+				Volatile.Write(ref running, 0);
 			}
 		});
 	}

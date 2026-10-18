@@ -29,6 +29,7 @@ Framenion is a fast, lightweight Warframe companion desktop app built with Avalo
 - On-screen scanning:
   - Relic reward overlay showing ducat value, market price and set items of the parent item when opening relics in-game
   - Riven overlay grading the card on the Kuva reroll screen, on each roll, and from a chat link
+  - A single configurable hotkey (Print Screen by default) scans whichever of the two is on screen
   - Scan regions are measured automatically and can be adjusted per screen in Settings
 - In-app inventory refresh flow using [warframe-api-helper](https://github.com/Sainan/warframe-api-helper) (download prompted on first use)
 
