@@ -19,9 +19,21 @@ public class WarframeMonitor : IDisposable
 	private bool lastRunning;
 	private uint warframeId;
 
+	/// <summary>Set between a cycle confirmation and its result, so only a real roll triggers a scan.</summary>
+	private bool rivenDialogPending;
+
 	public event Action<bool>? OnProcessStateChanged;
 	public event Action? OnRewardDetected;
 	public event Action? OnSelectionClosed;
+
+	/// <summary>The Kuva reroll screen opened.</summary>
+	public event Action? OnRivenSessionOpen;
+
+	/// <summary>A reroll was confirmed, so the card is about to show new values.</summary>
+	public event Action? OnRivenRolled;
+
+	/// <summary>The reroll screen closed.</summary>
+	public event Action? OnRivenSessionClose;
 
 	public WarframeMonitor()
 	{
@@ -45,25 +57,32 @@ public class WarframeMonitor : IDisposable
 	private void FindProcess()
 	{
 		var processes = Process.GetProcessesByName("Warframe.x64");
-		var process = processes.Length > 0 ? processes[0] : null;
-		bool running = process != null;
-		if (running == lastRunning) return;
+		try {
+			var process = processes.Length > 0 ? processes[0] : null;
+			bool running = process != null;
+			if (running == lastRunning) return;
 
-		lastRunning = running;
-		if (running) {
-			warframeId = (uint)process!.Id;
-			if (enableReader) {
-				StartLogReader();
+			lastRunning = running;
+			if (running) {
+				warframeId = (uint)process!.Id;
+				if (enableReader) {
+					StartLogReader();
+				}
+			} else {
+				warframeId = 0;
+				StopLogReader();
 			}
-		} else {
-			warframeId = 0;
-			StopLogReader();
-		}
 
-		Dispatcher.UIThread.Post(() =>
-		{
-			OnProcessStateChanged?.Invoke(running);
-		});
+			Dispatcher.UIThread.Post(() =>
+			{
+				OnProcessStateChanged?.Invoke(running);
+			});
+		} finally {
+			// This runs every 1.5s for the life of the app; the handles have to go back.
+			foreach (var process in processes) {
+				process.Dispose();
+			}
+		}
 	}
 
 	private void StartLogReader()
@@ -125,13 +144,50 @@ public class WarframeMonitor : IDisposable
 
 			if (length > 0) {
 				string message = Encoding.Default.GetString(buffer, 4, length);
-				if (message.Contains("Got rewards") || message.Contains("Pause countdown done")) {
-					OnRewardDetected?.Invoke();
-				} else if (message.Contains("Relic reward screen shut down")) {
-					OnSelectionClosed?.Invoke();
-				}
+				DispatchLogLine(message);
 			}
 			bufferReady.Set();
+		}
+	}
+
+	/// <summary>
+	/// Maps a game debug-output line onto an event. The riven markers come from the reroll
+	/// screen's own Flash/Lua logging.
+	/// </summary>
+	private void DispatchLogLine(string message)
+	{
+		if (message.Contains("Got rewards") || message.Contains("Pause countdown done")) {
+			OnRewardDetected?.Invoke();
+			return;
+		}
+
+		if (message.Contains("Relic reward screen shut down")) {
+			OnSelectionClosed?.Invoke();
+			return;
+		}
+
+		if (message.Contains("OmegaRerollSelection.swf")) {
+			OnRivenSessionOpen?.Invoke();
+			return;
+		}
+
+		// The reroll confirm dialog reports its result; either button means the card changed.
+		if (message.Contains("Dialog::SendResult(")) {
+			if (rivenDialogPending) {
+				rivenDialogPending = false;
+				OnRivenRolled?.Invoke();
+			}
+			return;
+		}
+
+		if (message.Contains("Are you sure you want to cycle") || message.Contains("Cycle Riven into current selection")) {
+			rivenDialogPending = true;
+			return;
+		}
+
+		if (message.Contains("NpcManager::ClearAgents() ReadyToCreateAgents = false")) {
+			rivenDialogPending = false;
+			OnRivenSessionClose?.Invoke();
 		}
 	}
 
