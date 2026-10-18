@@ -11,6 +11,10 @@ namespace framenion;
 
 public partial class RelicRewardWindow : Window
 {
+	private static readonly TimeSpan autoCloseAfter = TimeSpan.FromSeconds(15);
+
+	private DispatcherTimer? autoClose;
+
 	public string ItemName { get; set; } = string.Empty;
 	public string Ducats { get; set; } = string.Empty;
 	public string Price { get; set; } = string.Empty;
@@ -33,26 +37,35 @@ public partial class RelicRewardWindow : Window
 		DataContext = this;
 		Width = width;
 		WindowStartupLocation = WindowStartupLocation.Manual;
-		int left = x - (width / 2);
-		Position = new PixelPoint(left, y);
+		Position = new PixelPoint(x - (width / 2), y);
 		IsHitTestVisible = false;
 	}
 
-	public static async Task Display(string ItemName, int x, int y, int width)
+	public static Task Display(string itemName, int x, int y, int width)
 	{
-		var owner = AppData.MainWindow;
-		if (owner == null) return;
+		return Dispatcher.UIThread.InvokeAsync(() => {
+			var owner = AppData.MainWindow;
+			if (owner == null) return;
 
-		await Dispatcher.UIThread.InvokeAsync(() => {
-			if (!GameData.WFMarketData.TryGetValue(ItemName, out var itemData)) return;
-			var parentItem = GameData.ItemsList.FirstOrDefault(i => i.Ingredients.Any(ing => string.Equals(ing.Name, ItemName, StringComparison.OrdinalIgnoreCase)));
-			if (parentItem == null) return;
+			// Prices are best effort: warframe.market may be unreachable, and the overlay is
+			// still worth showing without them.
+			GameData.WFMarketData.TryGetValue(itemName, out var market);
+			GameData.DucatsByName.TryGetValue(itemName, out int ducats);
+			var setItems = new ObservableCollection<RecipeIngredient>();
+			string setName = string.Empty;
+			if (GameData.ItemsByIngredientName.TryGetValue(itemName, out var parentItem)) {
+				setName = $"{parentItem.Name} Set";
+				foreach (var ingredient in parentItem.Ingredients.Where(i => !string.IsNullOrEmpty(i.Ducats))) {
+					setItems.Add(ingredient);
+				}
+			}
 
-			var primeParts = new ObservableCollection<RecipeIngredient>(parentItem.Ingredients.Where(ing => !string.IsNullOrEmpty(ing.Ducats)).ToList());
-			var win = new RelicRewardWindow(ItemName, itemData.Price, itemData.Ducats, primeParts, $"{parentItem.Name} Set", x, y, width);
+			var win = new RelicRewardWindow(itemName, market?.Price ?? "", ducats > 0 ? ducats.ToString() : "", setItems, setName, x, y, width);
 			try {
 				win.ShowActivated = false;
-			} catch { }
+			} catch (Exception ex) {
+				Log.Debug($"Could not suppress activation for the reward overlay: {ex.Message}");
+			}
 
 			if (owner.IsVisible) {
 				win.Show(owner);
@@ -61,17 +74,23 @@ public partial class RelicRewardWindow : Window
 			}
 
 			AppData.RewardWindows.Add(win);
+			win.StartAutoClose();
 			win.Closed += (_, _) => {
+				win.autoClose?.Stop();
+				win.autoClose = null;
 				AppData.RewardWindows.Remove(win);
-				RelicRewardOCR.OcrRunning = false;
 			};
+		}).GetTask();
+	}
 
-			_ = Task.Run(async () => {
-				await Task.Delay(15000);
-				await Dispatcher.UIThread.InvokeAsync(() => {
-					if (win.IsVisible) win.Close();
-				});
-			});
-		});
+	/// <summary>A timer rather than a sleeping task, so closing early releases the window immediately.</summary>
+	private void StartAutoClose()
+	{
+		autoClose = new DispatcherTimer { Interval = autoCloseAfter };
+		autoClose.Tick += (_, _) => {
+			autoClose?.Stop();
+			if (IsVisible) Close();
+		};
+		autoClose.Start();
 	}
 }
