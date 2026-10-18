@@ -1,0 +1,60 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:framenion"
+        x:Class="framenion.RegionPickerWindow"
+        x:DataType="local:RegionPickerWindow"
+        WindowStartupLocation="Manual"
+        WindowDecorations="None"
+        Topmost="True"
+        Background="#101010">
+
+    <Grid RowDefinitions="*,Auto">
+
+        <!-- Capture plus the selection overlay -->
+        <Grid Grid.Row="0"
+              Name="SurfaceHost"
+              Background="#101010"
+              PointerPressed="OnSurfacePressed"
+              PointerMoved="OnSurfaceMoved"
+              PointerReleased="OnSurfaceReleased">
+            <Image Name="Screenshot" Stretch="Uniform"/>
+            <Canvas>
+                <Border Name="SelectionBox"
+                        IsVisible="False"
+                        BorderBrush="#4A9EFF"
+                        BorderThickness="2"
+                        Background="#304A9EFF"/>
+            </Canvas>
+        </Grid>
+
+        <!-- Toolbar -->
+        <Border Grid.Row="1" Background="{DynamicResource PanelBackgroundBrush}" Padding="14,10">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <StackPanel Grid.Column="0" Orientation="Vertical" Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Hint}"
+                               Foreground="{DynamicResource PrimaryForegroundBrush}"
+                               FontWeight="SemiBold"/>
+                    <TextBlock Name="ReadoutText"
+                               Text="Drag a box over the area to scan"
+                               Foreground="{DynamicResource SecondaryForegroundBrush}"
+                               FontSize="12"/>
+                    <TextBlock Text="Enter accepts, Esc cancels."
+                               Foreground="{DynamicResource SecondaryForegroundBrush}"
+                               FontSize="11"/>
+                </StackPanel>
+
+                <Button Grid.Column="1"
+                        Name="AcceptButton"
+                        Content="Use this region"
+                        Click="OnAcceptClick"
+                        IsEnabled="False"
+                        Padding="16,8"
+                        Margin="0,0,10,0"/>
+                <Button Grid.Column="2"
+                        Content="Cancel"
+                        Click="OnCancelClick"
+                        Padding="16,8"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

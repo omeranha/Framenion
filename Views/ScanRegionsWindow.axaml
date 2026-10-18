@@ -1,0 +1,95 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:framenion"
+        x:Class="framenion.ScanRegionsWindow"
+        x:DataType="local:ScanRegionsWindow"
+        Title="Scan regions"
+        SizeToContent="Height"
+        Width="620"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppBackgroundBrush}">
+
+    <StackPanel Margin="18" Spacing="14">
+
+        <TextBlock Text="Scan regions"
+                   FontSize="18"
+                   FontWeight="Bold"
+                   Foreground="{DynamicResource PrimaryForegroundBrush}"/>
+        <TextBlock TextWrapping="Wrap"
+                   Foreground="{DynamicResource SecondaryForegroundBrush}"
+                   FontSize="12"
+                   Text="Each region is stored as a percentage of the game window, so it survives a resolution change. Leave a region on Automatic to use the built-in measurements, which already adapt to aspect ratio and UI scale. Have Warframe showing the relevant screen before picking."/>
+
+        <ItemsControl ItemsSource="{Binding Rows}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="local:ScanRegionRow">
+                    <Border Background="{DynamicResource SurfaceBackgroundBrush}"
+                            BorderBrush="{DynamicResource ControlBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12"
+                            Margin="0,0,0,10">
+                        <Grid RowDefinitions="Auto,Auto,Auto">
+
+                            <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="{Binding Label}"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource PrimaryForegroundBrush}"/>
+                                    <TextBlock Text="{Binding Status}"
+                                               FontSize="12"
+                                               Foreground="{Binding StatusBrush}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <Button Content="Pick on screen"
+                                            Click="OnPickClick"
+                                            Tag="{Binding Kind}"
+                                            Padding="12,6"/>
+                                    <Button Content="Preview"
+                                            Click="OnPreviewClick"
+                                            Tag="{Binding Kind}"
+                                            ToolTip.Tip="Flash the region on screen for a couple of seconds"
+                                            Padding="12,6"/>
+                                    <Button Content="Automatic"
+                                            Click="OnResetClick"
+                                            Tag="{Binding Kind}"
+                                            ToolTip.Tip="Forget the override and go back to the built-in measurements"
+                                            Padding="12,6"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding Hint}"
+                                       FontSize="11"
+                                       Margin="0,6,0,0"
+                                       Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+
+                            <!-- Numeric nudging for fine adjustment -->
+                            <Grid Grid.Row="2"
+                                  ColumnDefinitions="Auto,*,Auto,*,Auto,*,Auto,*"
+                                  ColumnSpacing="6"
+                                  Margin="0,10,0,0"
+                                  IsEnabled="{Binding HasOverride}">
+                                <TextBlock Grid.Column="0" Text="X %" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                <NumericUpDown Grid.Column="1" Value="{Binding XPercent, Mode=TwoWay}" Minimum="0" Maximum="100" Increment="0.2" FormatString="0.0" ShowButtonSpinner="True"/>
+                                <TextBlock Grid.Column="2" Text="Y %" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                <NumericUpDown Grid.Column="3" Value="{Binding YPercent, Mode=TwoWay}" Minimum="0" Maximum="100" Increment="0.2" FormatString="0.0" ShowButtonSpinner="True"/>
+                                <TextBlock Grid.Column="4" Text="W %" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                <NumericUpDown Grid.Column="5" Value="{Binding WidthPercent, Mode=TwoWay}" Minimum="1" Maximum="100" Increment="0.2" FormatString="0.0" ShowButtonSpinner="True"/>
+                                <TextBlock Grid.Column="6" Text="H %" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                                <NumericUpDown Grid.Column="7" Value="{Binding HeightPercent, Mode=TwoWay}" Minimum="0.5" Maximum="100" Increment="0.2" FormatString="0.0" ShowButtonSpinner="True"/>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button Name="SaveButton" Content="Save" Click="OnSaveClick" Padding="20,8"/>
+            <Button Content="Cancel" Click="OnCancelClick" Padding="20,8"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

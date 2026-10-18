@@ -1,0 +1,22 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:framenion"
+        x:Class="framenion.RegionPreviewWindow"
+        x:DataType="local:RegionPreviewWindow"
+        WindowDecorations="None"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent">
+
+    <Border BorderBrush="#4A9EFF" BorderThickness="3" Background="#304A9EFF">
+        <TextBlock Text="{Binding Caption}"
+                   Foreground="White"
+                   Background="#C0101010"
+                   FontWeight="Bold"
+                   FontSize="12"
+                   Padding="6,3"
+                   HorizontalAlignment="Left"
+                   VerticalAlignment="Top"/>
+    </Border>
+</Window>

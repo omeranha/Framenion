@@ -38,6 +38,10 @@
                       Content="Enable relic reward overlay"
                       Foreground="{DynamicResource SecondaryForegroundBrush}"
                       ToolTip.Tip="Enable OCR for relic rewards.&#x0a;The OCR will run automatically if EE log reading is enabled or by pressing printscreen key at any moment."/>
+            <CheckBox Name="EnableRivenOverlayBox"
+                      Content="Enable riven reader overlay"
+                      Foreground="{DynamicResource SecondaryForegroundBrush}"
+                      ToolTip.Tip="Read and grade riven mods on the Kuva reroll screen.&#x0a;Runs automatically if EE log reading is enabled, or on the manual rescan hotkey."/>
             <Grid ColumnDefinitions="Auto, Auto, auto, auto" ColumnSpacing="10">
                 <TextBlock Grid.Column="0" Text="UI scale (%):" Foreground="{DynamicResource SecondaryForegroundBrush}" VerticalAlignment="Center" ToolTip.Tip="Insert Warframe UI scale value"/>
                 <NumericUpDown Grid.Column="1" Name="UiScaleNumeric" Minimum="50" Maximum="100" ShowButtonSpinner="False"/>
@@ -45,7 +49,13 @@
                 <TextBlock Grid.Column="2" Text="Overlay offset:" Foreground="{DynamicResource SecondaryForegroundBrush}" VerticalAlignment="Center" ToolTip.Tip="Set relic Y overlay offset value in pixels"/>
                 <NumericUpDown Grid.Column="3" Name="OverlayOffset" Minimum="0" ShowButtonSpinner="False"/>
             </Grid>
-            <CheckBox Name="DebugOCRBox" Content="Enable OCR debug images" Foreground="{DynamicResource SecondaryForegroundBrush}" ToolTip.Tip="Save debug images for relic reward OCR (for troubleshooting)"/>
+            <CheckBox Name="DebugOCRBox" Content="Enable OCR debug images" Foreground="{DynamicResource SecondaryForegroundBrush}" ToolTip.Tip="Save debug images for relic reward and riven OCR (for troubleshooting)"/>
+            <Button Name="ScanRegionsButton"
+                    Content="Scan regions…"
+                    Click="OnScanRegionsClick"
+                    HorizontalAlignment="Left"
+                    Padding="14,7"
+                    ToolTip.Tip="Set where on screen the relic rewards and riven cards are read from.&#x0a;Leave on Automatic to use the built-in measurements."/>
           </StackPanel>
         </StackPanel>
       </Border>

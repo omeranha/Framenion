@@ -25,6 +25,7 @@ public partial class SettingsWindow : Window
 		EnableNotificationsCheckBox.IsChecked = settings.EnableNotifications;
 		EnableEELogReadBox.IsChecked = settings.EnableEELogRead;
 		EnableRelicOverlayBox.IsChecked = settings.EnableRelicOverlay;
+		EnableRivenOverlayBox.IsChecked = settings.EnableRivenOverlay;
 		UiScaleNumeric.Value = settings.UIScale;
 		DebugOCRBox.IsChecked = settings.DebugOCR;
 		OverlayOffset.Value = settings.OverlayOffset;
@@ -36,10 +37,13 @@ public partial class SettingsWindow : Window
 		settings.EnableNotifications = EnableNotificationsCheckBox.IsChecked ?? true;
 		settings.EnableEELogRead = EnableEELogReadBox.IsChecked ?? true;
 		settings.EnableRelicOverlay = EnableRelicOverlayBox.IsChecked ?? true;
+		settings.EnableRivenOverlay = EnableRivenOverlayBox.IsChecked ?? true;
 		settings.UIScale = (int)(UiScaleNumeric.Value ?? settings.UIScale);
 		settings.DebugOCR = DebugOCRBox.IsChecked ?? false;
 		settings.OverlayOffset = (int)(OverlayOffset.Value ?? settings.OverlayOffset);
 		settings.ApplyToApplicationResources();
+		// Publish the new values, otherwise nothing picks them up until the next launch.
+		AppData.AppSettings = settings;
 
 		var originalBackground = SaveButton.Background;
 		try {
@@ -50,14 +54,27 @@ public partial class SettingsWindow : Window
 				AppData.Monitor?.Stop();
 			}
 			SaveButton.Content = "Saved";
-			SaveButton.Background = Brush.Parse("#33cc33");
+			SaveButton.Background = Brushes.LimeGreen;
 			await Task.Delay(2000);
+			// The window can be closed while the confirmation is showing.
+			if (!IsVisible) return;
 			SaveButton.Content = "Save";
 			SaveButton.Background = originalBackground;
 		} catch (Exception ex) {
+			Log.Error("Failed to save settings.", ex);
 			MessageBox.Show("Error", $"Failed to save settings: {ex.Message}");
 		}
 	}
 
 	private void Cancel_Click(object? sender, RoutedEventArgs e) => Close();
+
+	private async void OnScanRegionsClick(object? sender, RoutedEventArgs e)
+	{
+		try {
+			await new ScanRegionsWindow().ShowDialog(this);
+		} catch (Exception ex) {
+			Log.Error("Could not open the scan regions editor.", ex);
+			MessageBox.Show("Error", $"Failed to open scan regions: {ex.Message}");
+		}
+	}
 }
