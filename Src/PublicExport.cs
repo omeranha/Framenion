@@ -1,171 +1,303 @@
-﻿using Lzma;
+using Lzma;
+using framenion.Src.Riven;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
-namespace framenion.Src
+namespace framenion.Src;
+
+/// <summary>
+/// Downloads and parses Digital Extremes' official PublicExport feed.
+/// </summary>
+internal static class PublicExport
 {
-	internal class PublicExport
+	private const string indexUrl = "https://origin.warframe.com/PublicExport/index_en.txt.lzma";
+	private const string manifestBaseUrl = "https://content.warframe.com/PublicExport/Manifest/";
+
+	private const string manifestFile = "ExportManifest.json";
+	private const string regionsFile = "ExportRegions_en.json";
+	private const string warframesFile = "ExportWarframes_en.json";
+	private const string weaponsFile = "ExportWeapons_en.json";
+	private const string sentinelsFile = "ExportSentinels_en.json";
+	private const string recipesFile = "ExportRecipes_en.json";
+	private const string resourcesFile = "ExportResources_en.json";
+	private const string relicsFile = "ExportRelicArcane_en.json";
+	private const string upgradesFile = "ExportUpgrades_en.json";
+
+	// The feed ships 16 files; only these are ever read. Skipping the rest saves ~2 MB of
+	// download and disk per update.
+	private static readonly string[] requiredFiles = [
+		manifestFile, regionsFile, warframesFile, weaponsFile, sentinelsFile, recipesFile, resourcesFile, relicsFile, upgradesFile,
+	];
+
+	private const int maxParallelDownloads = 4;
+
+	private static string IndexPath => Path.Combine(AppData.CacheDir, "manifest");
+
+	private static string CachePath(string fileName) => Path.Combine(AppData.CacheDir, fileName);
+
+	/// <summary>Brings the local cache in line with the remote index. Returns true if anything was downloaded.</summary>
+	public static async Task<bool> SyncAsync()
 	{
-		public static async Task UpdateManifest()
-		{
-			using var indexStream = await AppData.GetStreamAsync("https://origin.warframe.com/PublicExport/index_en.txt.lzma");
-			string[] remoteIndex;
+		Directory.CreateDirectory(AppData.CacheDir);
+
+		var remoteHashes = await FetchIndexAsync();
+		if (remoteHashes.Count == 0) {
+			Log.Warn("PublicExport index was empty; keeping the existing cache.");
+			return false;
+		}
+
+		var localHashes = await ReadLocalIndexAsync();
+		var stale = new List<(string File, string Hash)>();
+		foreach (var fileName in requiredFiles) {
+			if (!remoteHashes.TryGetValue(fileName, out var remoteHash)) {
+				Log.Warn($"PublicExport index does not list {fileName}.");
+				continue;
+			}
+
+			bool current = localHashes.TryGetValue(fileName, out var localHash)
+				&& string.Equals(localHash, remoteHash, StringComparison.Ordinal)
+				&& File.Exists(CachePath(fileName));
+			if (!current) stale.Add((fileName, remoteHash));
+		}
+
+		if (stale.Count == 0) return false;
+
+		Log.Info($"Updating {stale.Count} export file(s): {string.Join(", ", stale.ConvertAll(s => s.File))}");
+		Notify.Toast("Data initialization", "A new update has been found, updating cache");
+
+		var downloaded = new List<(string File, string Hash)>();
+		var gate = new SemaphoreSlim(maxParallelDownloads);
+		var sync = new object();
+
+		await Parallel.ForEachAsync(stale, async (entry, _) => {
+			await gate.WaitAsync();
+			try {
+				// The CDN only serves the hash-suffixed name; requesting the bare file name is a 404.
+				await DownloadAtomicAsync($"{manifestBaseUrl}{entry.File}!{entry.Hash}", CachePath(entry.File));
+				lock (sync) {
+					downloaded.Add(entry);
+				}
+			} catch (Exception ex) {
+				Log.Error($"Failed to download {entry.File}.", ex);
+			} finally {
+				gate.Release();
+			}
+		});
+
+		// Record only what actually landed, so a failed download is retried on the next launch
+		// instead of being remembered as current.
+		foreach (var entry in downloaded) {
+			localHashes[entry.File] = entry.Hash;
+		}
+		await WriteLocalIndexAsync(localHashes);
+
+		if (downloaded.Count != stale.Count) {
+			throw new IOException($"Only {downloaded.Count} of {stale.Count} export files could be downloaded. See {Log.Path}.");
+		}
+		return true;
+	}
+
+	/// <summary>Parses the cached export files into <see cref="GameData"/>.</summary>
+	public static async Task LoadAsync()
+	{
+		// The manifest resolves icon paths for everything else, so it has to come first.
+		GameData.ExportManifest = await ParseManifestAsync();
+		GameData.ExportRegions = await ParseAsync(regionsFile, ExportJsonContext.Default.ExportRegionsRoot, r => r.Items, r => r.UniqueName);
+		GameData.ExportRecipes = await ParseAsync(recipesFile, ExportJsonContext.Default.ExportRecipesRoot, r => r.Items, r => r.ResultType);
+		GameData.RecipesByUniqueName = await ParseAsync(recipesFile, ExportJsonContext.Default.ExportRecipesRoot, r => r.Items, r => r.UniqueName);
+		GameData.ExportResources = await ParseAsync(resourcesFile, ExportJsonContext.Default.ExportResourcesRoot, r => r.Items, r => r.UniqueName, ApplyIcon);
+		GameData.ExportWarframes = await ParseAsync(warframesFile, ExportJsonContext.Default.ExportWarframesRoot, r => r.Items, r => r.UniqueName, ApplyIcon);
+		GameData.ExportWeapons = await ParseAsync(weaponsFile, ExportJsonContext.Default.ExportWeaponsRoot, r => r.Items, r => r.UniqueName, ApplyIcon);
+		GameData.ExportSentinels = await ParseAsync(sentinelsFile, ExportJsonContext.Default.ExportSentinelsRoot, r => r.Items, r => r.UniqueName, ApplyIcon);
+		GameData.ExportRelics = await ParseRelicsAsync();
+		GameData.RivenMods = await ParseRivenModsAsync();
+	}
+
+	/// <summary>
+	/// Riven stat pools. Only the "Randomized" upgrades that carry entries are riven mod types;
+	/// the veiled variants list none.
+	/// </summary>
+	private static async Task<FrozenDictionary<string, RivenModType>> ParseRivenModsAsync()
+	{
+		var path = CachePath(upgradesFile);
+		if (!File.Exists(path)) {
+			Log.Warn("ExportUpgrades missing from cache; riven grading will be unavailable.");
+			return FrozenDictionary<string, RivenModType>.Empty;
+		}
+
+		await using var stream = File.OpenRead(path);
+		var root = await JsonSerializer.DeserializeAsync(stream, ExportJsonContext.Default.ExportUpgradesRoot);
+		if (root == null) return FrozenDictionary<string, RivenModType>.Empty;
+
+		var builder = new Dictionary<string, RivenModType>(StringComparer.Ordinal);
+		foreach (var upgrade in root.Items) {
+			if (upgrade.UpgradeEntries.Length == 0) continue;
+			if (!upgrade.UniqueName.Contains("Randomized", StringComparison.Ordinal)) continue;
+
+			var entries = new List<RivenUpgradeEntry>(upgrade.UpgradeEntries.Length);
+			foreach (var entry in upgrade.UpgradeEntries) {
+				if (string.IsNullOrEmpty(entry.Tag) || entry.UpgradeValues.Length == 0) continue;
+				var value = entry.UpgradeValues[0];
+				entries.Add(new RivenUpgradeEntry(entry.Tag, value.Value, RivenStatTables.CleanLocTag(value.LocTag), entry.PrefixTag, entry.SuffixTag));
+			}
+
+			if (entries.Count == 0) continue;
+			builder[upgrade.UniqueName] = new RivenModType(upgrade.UniqueName, upgrade.Name, entries);
+		}
+
+		Log.Info($"Riven mod types indexed: {builder.Count}");
+		return builder.ToFrozenDictionary(StringComparer.Ordinal);
+	}
+
+	private static async Task<FrozenDictionary<string, string>> ParseManifestAsync()
+	{
+		var path = CachePath(manifestFile);
+		if (!File.Exists(path)) return FrozenDictionary<string, string>.Empty;
+
+		await using var stream = File.OpenRead(path);
+		var root = await JsonSerializer.DeserializeAsync(stream, ExportJsonContext.Default.ExportManifestRoot);
+		if (root == null) return FrozenDictionary<string, string>.Empty;
+
+		var builder = new Dictionary<string, string>(root.Items.Length, StringComparer.Ordinal);
+		foreach (var entry in root.Items) {
+			if (string.IsNullOrEmpty(entry.UniqueName) || string.IsNullOrEmpty(entry.TextureLocation)) continue;
+			builder[entry.UniqueName] = entry.TextureLocation.Replace('\\', '/').TrimStart('/');
+		}
+		return builder.ToFrozenDictionary(StringComparer.Ordinal);
+	}
+
+	private static async Task<FrozenDictionary<string, RelicDTO>> ParseRelicsAsync()
+	{
+		var path = CachePath(relicsFile);
+		if (!File.Exists(path)) return FrozenDictionary<string, RelicDTO>.Empty;
+
+		await using var stream = File.OpenRead(path);
+		var root = await JsonSerializer.DeserializeAsync(stream, ExportJsonContext.Default.ExportRelicArcaneRoot);
+		if (root == null) return FrozenDictionary<string, RelicDTO>.Empty;
+
+		var builder = new Dictionary<string, RelicDTO>(StringComparer.Ordinal);
+		foreach (var relic in root.Items) {
+			// The file also carries arcanes; only void projections are relics.
+			if (string.IsNullOrEmpty(relic.UniqueName) || !relic.UniqueName.Contains("/Projections/", StringComparison.Ordinal)) continue;
+			ApplyIcon(relic.UniqueName, relic);
+			builder[relic.UniqueName] = relic;
+		}
+		return builder.ToFrozenDictionary(StringComparer.Ordinal);
+	}
+
+	private static async Task<FrozenDictionary<string, TItem>> ParseAsync<TRoot, TItem>(
+		string fileName,
+		System.Text.Json.Serialization.Metadata.JsonTypeInfo<TRoot> typeInfo,
+		Func<TRoot, TItem[]> selectItems,
+		Func<TItem, string> selectKey,
+		Action<string, TItem>? configure = null) where TRoot : class
+	{
+		var path = CachePath(fileName);
+		if (!File.Exists(path)) {
+			Log.Warn($"Export file missing from cache: {fileName}");
+			return FrozenDictionary<string, TItem>.Empty;
+		}
+
+		await using var stream = File.OpenRead(path);
+		var root = await JsonSerializer.DeserializeAsync(stream, typeInfo);
+		if (root == null) return FrozenDictionary<string, TItem>.Empty;
+
+		var items = selectItems(root);
+		var builder = new Dictionary<string, TItem>(items.Length, StringComparer.Ordinal);
+		foreach (var item in items) {
+			var key = selectKey(item);
+			if (string.IsNullOrEmpty(key)) continue;
+			configure?.Invoke(key, item);
+			builder[key] = item;
+		}
+		return builder.ToFrozenDictionary(StringComparer.Ordinal);
+	}
+
+	/// <summary>The manifest's texture location is authoritative; the per-item icon is the fallback.</summary>
+	private static void ApplyIcon<T>(string uniqueName, T item)
+	{
+		if (!GameData.ExportManifest.TryGetValue(uniqueName, out var texture) || string.IsNullOrEmpty(texture)) return;
+
+		switch (item) {
+			case ItemDTO dto: dto.Icon = texture; break;
+			case ResourceDTO dto: dto.Icon = texture; break;
+			case RelicDTO dto: dto.Icon = texture; break;
+		}
+	}
+
+	private static async Task<Dictionary<string, string>> FetchIndexAsync()
+	{
+		var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
+		try {
+			using var indexStream = await AppData.GetStreamAsync(indexUrl);
+			string text;
 			using (var lzmaStream = new LzmaStream(indexStream, CompressionMode.Decompress, false))
 			using (var reader = new StreamReader(lzmaStream)) {
-				var text = await reader.ReadToEndAsync();
-				remoteIndex = text.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries);
+				text = await reader.ReadToEndAsync();
 			}
 
-			string localPath = Path.Combine(AppData.CacheDir, "manifest");
-			string[] localIndex = File.Exists(localPath) ? File.ReadAllLines(localPath) : [];
-			var localHashes = localIndex.Select(x => x.Split('!', 2)).Where(x => x.Length == 2).ToDictionary(x => x[0], x => x[1]);
-			var outdatedFiles = new List<string>();
-			foreach (var line in remoteIndex) {
+			foreach (var line in text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)) {
 				var parts = line.Split('!', 2);
-				if (parts.Length != 2) continue;
-
-				string fileName = parts[0];
-				string remoteHash = parts[1];
-				if (!localHashes.TryGetValue(fileName, out var localHash)) {
-					outdatedFiles.Add($"{fileName}!{remoteHash}");
-					continue;
-				}
-
-				if (!string.Equals(localHash, remoteHash, StringComparison.Ordinal)) {
-					outdatedFiles.Add(fileName);
-				}
+				if (parts.Length == 2) hashes[parts[0]] = parts[1];
 			}
-
-			if (outdatedFiles.Count > 0) {
-				ToastWindow.Show("Data initialization", "A new update has been found, updating cache");
-				Directory.CreateDirectory("cache");
-				foreach (var file in outdatedFiles) {
-					await AppData.DownloadToFileAsync($"http://content.warframe.com/PublicExport/Manifest/{file}", Path.Combine(AppData.CacheDir, file.Split('!')[0]));
-				}
-			}
-			File.WriteAllLines(localPath, remoteIndex);
+		} catch (Exception ex) {
+			// Offline start is fine as long as the cache is populated.
+			Log.Warn("Could not fetch the PublicExport index.", ex);
 		}
+		return hashes;
+	}
 
-		public static async Task ParseExportManifest()
-		{
-			var manifest = Path.Combine(AppData.CacheDir, "ExportManifest.json");
-			if (!File.Exists(manifest)) return;
+	private static async Task<Dictionary<string, string>> ReadLocalIndexAsync()
+	{
+		var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
+		if (!File.Exists(IndexPath)) return hashes;
 
-			await using var stream = File.OpenRead(manifest);
-			using var doc = await JsonDocument.ParseAsync(stream);
-			var builder = new Dictionary<string, string>(StringComparer.Ordinal);
-			foreach (var element in doc.RootElement.EnumerateObject().First().Value.EnumerateArray()) {
-				element.TryGetProperty("uniqueName", out var uniqueName);
-				element.TryGetProperty("textureLocation", out var textureLocation);
-				builder[uniqueName.ToString()] = textureLocation.ToString();
+		try {
+			foreach (var line in await File.ReadAllLinesAsync(IndexPath)) {
+				var parts = line.Split('!', 2);
+				if (parts.Length == 2) hashes[parts[0]] = parts[1];
 			}
-			GameData.ExportManifest = builder.ToFrozenDictionary();
+		} catch (Exception ex) {
+			Log.Warn("Could not read the cached PublicExport index.", ex);
 		}
+		return hashes;
+	}
 
-		public static async Task ParseRegions()
-		{
-			var regions = Path.Combine(AppData.CacheDir, "ExportRegions_en.json");
-			if (!File.Exists(regions)) return;
-
-			await using var stream = File.OpenRead(regions);
-			using var doc = await JsonDocument.ParseAsync(stream);
-			var builder = new Dictionary<string, RegionDTO>(StringComparer.Ordinal);
-			foreach (var element in doc.RootElement.EnumerateObject().First().Value.EnumerateArray()) {
-				var region = JsonSerializer.Deserialize<RegionDTO>(element, ExportJsonContext.Default.RegionDTO);
-				if (region != null) {
-					builder[region.UniqueName] = region;
-				}
+	private static async Task WriteLocalIndexAsync(Dictionary<string, string> hashes)
+	{
+		try {
+			var lines = new List<string>(hashes.Count);
+			foreach (var (file, hash) in hashes) {
+				lines.Add($"{file}!{hash}");
 			}
-			GameData.ExportRegions = builder.ToFrozenDictionary();
+			lines.Sort(StringComparer.Ordinal);
+			await File.WriteAllLinesAsync(IndexPath, lines);
+		} catch (Exception ex) {
+			Log.Error("Could not write the cached PublicExport index.", ex);
 		}
+	}
 
-		public static async Task ParseFile(string name)
-		{
-			var cacheFile = Path.Combine(AppData.CacheDir, name);
-			switch (name) {
-				case "ExportWarframes_en.json":
-					GameData.ExportWarframes = await DeserializeItem(cacheFile);
-					break;
-				case "ExportWeapons_en.json":
-					GameData.ExportWeapons = await DeserializeItem(cacheFile);
-					break;
-				case "ExportRecipes_en.json": {
-					await using var stream = File.OpenRead(cacheFile);
-					using var doc = await JsonDocument.ParseAsync(stream);
-					var builder = new Dictionary<string, RecipeDTO>(StringComparer.Ordinal);
-					foreach (var element in doc.RootElement.EnumerateObject().First().Value.EnumerateArray()) {
-						var item = JsonSerializer.Deserialize<RecipeDTO>(element, ExportJsonContext.Default.RecipeDTO);
-						if (item != null) {
-							builder[item.ResultType] = item;
-						}
-					}
-					GameData.ExportRecipes = builder.ToFrozenDictionary(StringComparer.Ordinal);
-						break;
-					}
-				case "ExportResources_en.json": {
-						await using var stream = File.OpenRead(cacheFile);
-						using var doc = await JsonDocument.ParseAsync(stream);
-						var builder = new Dictionary<string, ResourceDTO>(StringComparer.Ordinal);
-						foreach (var element in doc.RootElement.EnumerateObject().First().Value.EnumerateArray()) {
-							var item = JsonSerializer.Deserialize<ResourceDTO>(element, ExportJsonContext.Default.ResourceDTO);
-							if (item != null) {
-								GameData.ExportManifest.TryGetValue(item.UniqueName, out var iconPath);
-								if (iconPath != null) {
-									item.Icon = iconPath;
-								}
-								builder[item.UniqueName] = item;
-							}
-						}
-						GameData.ExportResources = builder.ToFrozenDictionary(StringComparer.Ordinal);
-						break;
-					}
-				case "ExportRelicArcane_en.json": {
-						await using var stream = File.OpenRead(cacheFile);
-						using var doc = await JsonDocument.ParseAsync(stream);
-						var builder = new Dictionary<string, RelicDTO>(StringComparer.Ordinal);
-						foreach (var element in doc.RootElement.EnumerateObject().First().Value.EnumerateArray()) {
-							element.TryGetProperty("uniqueName", out var unique);
-							if (!unique.GetString()!.Contains("/Projections/")) continue;
-
-							var item = JsonSerializer.Deserialize<RelicDTO>(element, ExportJsonContext.Default.RelicDTO);
-							if (item != null) {
-								GameData.ExportManifest.TryGetValue(item.UniqueName, out var iconPath);
-								if (iconPath != null) {
-									item.Icon = iconPath;
-								}
-								builder[item.UniqueName] = item;
-							}
-						}
-						GameData.ExportRelics = builder.ToFrozenDictionary(StringComparer.Ordinal);
-						break;
-					}
-				default:
-					break;
+	/// <summary>Downloads via a temp file so an interrupted transfer cannot leave a truncated cache entry.</summary>
+	private static async Task DownloadAtomicAsync(string url, string destination)
+	{
+		var temp = destination + ".part";
+		try {
+			using (var source = await AppData.GetStreamAsync(url))
+			await using (var file = File.Create(temp)) {
+				await source.CopyToAsync(file);
 			}
-		}
 
-		public static async Task<FrozenDictionary<string, ItemDTO>> DeserializeItem(string path)
-		{
-			await using var stream = File.OpenRead(path);
-			using var doc = await JsonDocument.ParseAsync(stream);
-			var builder = new Dictionary<string, ItemDTO>(StringComparer.Ordinal);
-			foreach (var element in doc.RootElement.EnumerateObject().First().Value.EnumerateArray()) {
-				var item = JsonSerializer.Deserialize<ItemDTO>(element, ExportJsonContext.Default.ItemDTO);
-				if (item != null) {
-					GameData.ExportManifest.TryGetValue(item.UniqueName, out var iconPath);
-					if (iconPath != null) {
-						item.Icon = iconPath;
-					}
-					builder[item.UniqueName] = item;
-				}
+			File.Move(temp, destination, overwrite: true);
+		} finally {
+			if (File.Exists(temp)) {
+				try { File.Delete(temp); } catch { /* best effort */ }
 			}
-			return builder.ToFrozenDictionary(StringComparer.Ordinal);
 		}
 	}
 }

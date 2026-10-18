@@ -1,6 +1,6 @@
 ﻿using Avalonia.Controls;
 using Avalonia.Media.Imaging;
-using Sdcb.PaddleOCR;
+using framenion.Src.Ocr;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -22,14 +22,18 @@ public class AppData
 	public static ConcurrentDictionary<string, Lazy<Bitmap?>> BitmapCache { get; } = new(StringComparer.Ordinal);
 	public static  SemaphoreSlim IconDownloadSemaphore { get; } = new(10, 10);
 	public static HttpClient HttpClient { get; } = new() {
-		BaseAddress = new Uri("http://content.warframe.com/PublicExport"),
+		BaseAddress = new Uri("https://content.warframe.com/PublicExport/"),
+		DefaultRequestHeaders = { { "User-Agent", "Framenion" } },
 	};
-	public static PaddleOcrAll? PaddleEngine { get; set; }
+	public static IOcrEngine? OcrEngine { get; set; }
 	public static WarframeMonitor? Monitor { get; } = new();
 
 	public static AppSettings AppSettings { get; set; } = new();
 
-	public static List<RelicRewardWindow> RewardWindows { get; } = [];
+	/// <summary>Set when the user picks Exit, so closing the window stops hiding it to the tray.</summary>
+	public static bool IsShuttingDown { get; set; }
+
+	public static List<Window> RewardWindows { get; } = [];
 
 	public static async Task<Stream> GetStreamAsync(string url)
 	{

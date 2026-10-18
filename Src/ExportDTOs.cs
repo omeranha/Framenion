@@ -1,4 +1,3 @@
-﻿using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace framenion.Src;
@@ -20,11 +19,14 @@ public class ItemDTO
 	[JsonPropertyName("partType")]
 	public string? PartType { get; set; }
 
+	[JsonPropertyName("omegaAttenuation")]
+	public double? OmegaAttenuation { get; set; }
+
+	[JsonPropertyName("multishot")]
+	public double? Multishot { get; set; }
+
 	[JsonPropertyName("maxLevelCap")]
 	public int? MaxLevelCap { get; set; }
-
-	[JsonPropertyName("description")]
-	public string? Description { get; set; }
 }
 
 public class RecipeDTO
@@ -35,8 +37,11 @@ public class RecipeDTO
 	[JsonPropertyName("resultType")]
 	public string ResultType { get; set; } = "";
 
+	[JsonPropertyName("primeSellingPrice")]
+	public int? Ducats { get; set; }
+
 	[JsonPropertyName("ingredients")]
-	public List<RecipeIngredientDTO> Ingredients { get; set; } = [];
+	public RecipeIngredientDTO[] Ingredients { get; set; } = [];
 }
 
 public class RecipeIngredientDTO
@@ -46,9 +51,6 @@ public class RecipeIngredientDTO
 
 	[JsonPropertyName("ItemCount")]
 	public int Count { get; set; } = 1;
-
-	[JsonPropertyName("ProductCategory")]
-	public string ProductCategory { get; set; } = "";
 }
 
 public class ResourceDTO
@@ -61,6 +63,9 @@ public class ResourceDTO
 
 	[JsonPropertyName("icon")]
 	public string Icon { get; set; } = "";
+
+	[JsonPropertyName("primeSellingPrice")]
+	public int? Ducats { get; set; }
 }
 
 public class RegionDTO
@@ -98,9 +103,6 @@ public class RelicDTO
 	[JsonPropertyName("name")]
 	public string Name { get; set; } = "";
 
-	[JsonPropertyName("description")]
-	public string Description { get; set; } = "";
-
 	[JsonPropertyName("relicRewards")]
 	public RewardDTO[] RelicRewards { get; set; } = [];
 }
@@ -110,26 +112,128 @@ public class RewardDTO
 	[JsonPropertyName("rewardName")]
 	public string RewardName { get; set; } = "";
 
-	[JsonPropertyName("ItemCount")]
+	[JsonPropertyName("itemCount")]
 	public int Count { get; set; } = 1;
 
 	[JsonPropertyName("rarity")]
 	public string Rarity { get; set; } = "";
 }
 
-[JsonSerializable(typeof(ItemDTO))]
-[JsonSerializable(typeof(ResourceDTO))]
-[JsonSerializable(typeof(RecipeDTO))]
-[JsonSerializable(typeof(RecipeIngredientDTO))]
-[JsonSerializable(typeof(RegionDTO))]
-[JsonSerializable(typeof(RelicDTO))]
-[JsonSerializable(typeof(RewardDTO))]
+public class ManifestEntryDTO
+{
+	[JsonPropertyName("uniqueName")]
+	public string UniqueName { get; set; } = "";
 
-[JsonSerializable(typeof(Dictionary<string, ItemDTO>))]
-[JsonSerializable(typeof(Dictionary<string, ResourceDTO>))]
-[JsonSerializable(typeof(Dictionary<string, RecipeDTO>))]
-[JsonSerializable(typeof(Dictionary<string, RegionDTO>))]
-[JsonSerializable(typeof(Dictionary<string, RelicDTO>))]
-[JsonSerializable(typeof(Dictionary<string, List<RelicDTO>>))]
+	[JsonPropertyName("textureLocation")]
+	public string TextureLocation { get; set; } = "";
+}
 
+#region Rivens
+public class UpgradeDTO
+{
+	[JsonPropertyName("uniqueName")]
+	public string UniqueName { get; set; } = "";
+
+	[JsonPropertyName("name")]
+	public string Name { get; set; } = "";
+
+	[JsonPropertyName("upgradeEntries")]
+	public UpgradeEntryDTO[] UpgradeEntries { get; set; } = [];
+}
+
+public class UpgradeEntryDTO
+{
+	[JsonPropertyName("tag")]
+	public string Tag { get; set; } = "";
+
+	[JsonPropertyName("prefixTag")]
+	public string PrefixTag { get; set; } = "";
+
+	[JsonPropertyName("suffixTag")]
+	public string SuffixTag { get; set; } = "";
+
+	[JsonPropertyName("upgradeValues")]
+	public UpgradeValueDTO[] UpgradeValues { get; set; } = [];
+}
+
+public class UpgradeValueDTO
+{
+	[JsonPropertyName("value")]
+	public double Value { get; set; }
+
+	/// <summary>Localized label template, e.g. "|val|% &lt;DT_FIRE_COLOR&gt;Heat".</summary>
+	[JsonPropertyName("locTag")]
+	public string LocTag { get; set; } = "";
+}
+
+public class ExportUpgradesRoot
+{
+	[JsonPropertyName("ExportUpgrades")]
+	public UpgradeDTO[] Items { get; set; } = [];
+}
+#endregion
+
+#region Export roots
+// DE's official export wraps every file in a single property named after the file. Declaring
+// the wrapper lets the whole file be read in one source-generated pass instead of being
+// materialized as a JsonDocument and then re-serialized element by element.
+public class ExportManifestRoot
+{
+	// This one file does not follow the ExportX naming the rest of the feed uses.
+	[JsonPropertyName("Manifest")]
+	public ManifestEntryDTO[] Items { get; set; } = [];
+}
+
+public class ExportWarframesRoot
+{
+	[JsonPropertyName("ExportWarframes")]
+	public ItemDTO[] Items { get; set; } = [];
+}
+
+public class ExportWeaponsRoot
+{
+	[JsonPropertyName("ExportWeapons")]
+	public ItemDTO[] Items { get; set; } = [];
+}
+
+public class ExportSentinelsRoot
+{
+	[JsonPropertyName("ExportSentinels")]
+	public ItemDTO[] Items { get; set; } = [];
+}
+
+public class ExportRecipesRoot
+{
+	[JsonPropertyName("ExportRecipes")]
+	public RecipeDTO[] Items { get; set; } = [];
+}
+
+public class ExportResourcesRoot
+{
+	[JsonPropertyName("ExportResources")]
+	public ResourceDTO[] Items { get; set; } = [];
+}
+
+public class ExportRegionsRoot
+{
+	[JsonPropertyName("ExportRegions")]
+	public RegionDTO[] Items { get; set; } = [];
+}
+
+public class ExportRelicArcaneRoot
+{
+	[JsonPropertyName("ExportRelicArcane")]
+	public RelicDTO[] Items { get; set; } = [];
+}
+#endregion
+
+[JsonSerializable(typeof(ExportManifestRoot))]
+[JsonSerializable(typeof(ExportUpgradesRoot))]
+[JsonSerializable(typeof(ExportWarframesRoot))]
+[JsonSerializable(typeof(ExportWeaponsRoot))]
+[JsonSerializable(typeof(ExportSentinelsRoot))]
+[JsonSerializable(typeof(ExportRecipesRoot))]
+[JsonSerializable(typeof(ExportResourcesRoot))]
+[JsonSerializable(typeof(ExportRegionsRoot))]
+[JsonSerializable(typeof(ExportRelicArcaneRoot))]
 public partial class ExportJsonContext : JsonSerializerContext { }
