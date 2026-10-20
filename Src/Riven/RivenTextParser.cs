@@ -248,9 +248,9 @@ public static class RivenTextParser
 			var hit = FindStatName(line);
 			if (hit == null) continue;
 
-			var (name, index) = hit.Value;
+			var (name, index, length) = hit.Value;
 			var prefix = line[..index];
-			var suffix = line[(index + name.Length)..];
+			var suffix = line[(index + length)..];
 
 			var parsed = ExtractSignAndValue(prefix) ?? ExtractSignAndValue(suffix);
 			bool multiplier = parsed?.Multiplier ?? false;
@@ -313,20 +313,31 @@ public static class RivenTextParser
 		return output;
 	}
 
-	private static (string Name, int Index)? FindStatName(string line)
+	/// <summary>
+	/// Locates a stat name in a line, returning the canonical name plus the span that actually
+	/// matched. The two differ in length: a truncated or misread name is completed from a
+	/// shorter fragment, so slicing the line by the canonical name's length ran off the end.
+	/// </summary>
+	private static (string Name, int Index, int Length)? FindStatName(string line)
 	{
 		foreach (var stat in RivenStatTables.KnownStats) {
 			int index = line.IndexOf(stat, StringComparison.OrdinalIgnoreCase);
-			if (index >= 0) return (stat, index);
+			if (index >= 0) return (stat, index, stat.Length);
 		}
 
 		// No exact hit: try to complete a truncated name from the text after the value.
 		var fragment = valuePrefix.Replace(line, "").Trim();
 		if (fragment.Length < 5) return null;
 
+		// The fragment is the line with its value stripped and trimmed, so it is normally a
+		// literal substring; checking keeps a surprise from producing a negative span.
+		int start = line.IndexOf(fragment, StringComparison.OrdinalIgnoreCase);
+		if (start < 0) return null;
+		int length = Math.Min(fragment.Length, line.Length - start);
+
 		var prefixMatches = RivenStatTables.KnownStats
 			.Where(s => s.StartsWith(fragment, StringComparison.OrdinalIgnoreCase)).ToList();
-		if (prefixMatches.Count == 1) return (prefixMatches[0], line.IndexOf(fragment, StringComparison.OrdinalIgnoreCase));
+		if (prefixMatches.Count == 1) return (prefixMatches[0], start, length);
 
 		int maxDistance = fragment.Length >= 7 ? 2 : 1;
 		string? best = null;
@@ -340,7 +351,7 @@ public static class RivenTextParser
 			}
 		}
 
-		return best == null ? null : (best, line.IndexOf(fragment, StringComparison.OrdinalIgnoreCase));
+		return best == null ? null : (best, start, length);
 	}
 
 	private static void Merge(List<RivenStat> results, RivenStat stat)
