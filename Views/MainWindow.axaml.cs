@@ -265,11 +265,7 @@ public partial class MainWindow : Window
 		}
 	}
 
-	private static void OnHotkeyPressed()
-	{
-		RelicRewardOCR.ReadRelicWindow();
-		RivenReader.Rescan();
-	}
+	private static void OnHotkeyPressed() => ManualScan.Trigger();
 
 	/// <summary>
 	/// Downloads, parses and indexes the export on a worker thread. All of this used to run on

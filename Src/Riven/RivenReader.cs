@@ -48,9 +48,31 @@ public static class RivenReader
 	/// flag: the log marker that sets it does not always arrive, and guessing wrong meant the
 	/// hotkey scanned entirely the wrong part of the screen.
 	/// </summary>
-	public static void Rescan() => Queue(SessionOpen
-		? [RivenScanLayout.Reroll, RivenScanLayout.Chat]
-		: [RivenScanLayout.Chat, RivenScanLayout.Reroll], 0);
+	public static void Rescan() => _ = TryRescanAsync(reportEmpty: true);
+
+	/// <summary>
+	/// Same as <see cref="Rescan"/> but awaitable and reporting its outcome, so a caller that
+	/// also tries another reader can decide for itself what to tell the user.
+	/// </summary>
+	public static Task<ScanOutcome> TryRescanAsync(bool reportEmpty)
+	{
+		if (!AppData.AppSettings.EnableRivenOverlay) return Task.FromResult(ScanOutcome.Disabled);
+
+		RivenScanLayout[] layouts = SessionOpen
+			? [RivenScanLayout.Reroll, RivenScanLayout.Chat]
+			: [RivenScanLayout.Chat, RivenScanLayout.Reroll];
+
+		int token = Interlocked.Increment(ref generation);
+		return Task.Run(async () => {
+			try {
+				return await ScanAsync(layouts, token, reportEmpty);
+			} catch (Exception ex) {
+				Log.Error("[Riven] Scan failed.", ex);
+				Notify.Error("Riven scan failed", $"{ex.Message}\n\nSee {Log.Path}");
+				return ScanOutcome.Unavailable;
+			}
+		});
+	}
 
 	private static void Queue(RivenScanLayout layout, int delayMs) => Queue([layout], delayMs);
 
@@ -64,7 +86,9 @@ public static class RivenReader
 				if (delayMs > 0) await Task.Delay(delayMs);
 				if (Volatile.Read(ref generation) != token) return;
 
-				await ScanAsync(layouts, token);
+				// Log-driven, so the reroll screen is known to be open and an empty read is
+				// worth reporting.
+				await ScanAsync(layouts, token, reportEmpty: true);
 			} catch (Exception ex) {
 				Log.Error("[Riven] Scan failed.", ex);
 				Notify.Error("Riven scan failed", $"{ex.Message}\n\nSee {Log.Path}");
@@ -72,17 +96,17 @@ public static class RivenReader
 		});
 	}
 
-	private static async Task ScanAsync(RivenScanLayout[] layouts, int token)
+	private static async Task<ScanOutcome> ScanAsync(RivenScanLayout[] layouts, int token, bool reportEmpty)
 	{
 		var engine = AppData.OcrEngine;
 		if (engine == null) {
 			Notify.Toast("Riven reader", OcrEngineFactory.UnavailableMessage);
-			return;
+			return ScanOutcome.Unavailable;
 		}
 
 		if (!RivenData.IsAvailable) {
 			Notify.Toast("Riven reader", "Riven data is still loading.");
-			return;
+			return ScanOutcome.Unavailable;
 		}
 
 		await gate.WaitAsync();
@@ -99,7 +123,8 @@ public static class RivenReader
 
 				using var frame = ScreenCapture.Capture();
 				foreach (var layout in layouts) {
-					if (Volatile.Read(ref generation) != token) return;
+					// Superseded by a newer scan request, so this one's result is stale.
+					if (Volatile.Read(ref generation) != token) return ScanOutcome.Unavailable;
 
 					var result = await scanner.ScanAsync(frame.Image, layout);
 					if (result == null) continue;
@@ -115,16 +140,17 @@ public static class RivenReader
 				}
 			}
 
-			if (Volatile.Read(ref generation) != token) return;
+			if (Volatile.Read(ref generation) != token) return ScanOutcome.Unavailable;
 
 			if (best == null || best.Stats.Count == 0) {
 				Log.Info("[Riven] No riven card detected.");
-				Notify.Toast("No riven detected", $"Could not read a riven card on screen. See {Log.Path}");
-				return;
+				if (reportEmpty) Notify.Toast("No riven detected", $"Could not read a riven card on screen. See {Log.Path}");
+				return ScanOutcome.NotFound;
 			}
 
 			Log.Info($"[Riven] {best.WeaponName}: {string.Join(", ", best.Stats.Select(s => $"{(s.Positive ? "+" : "-")}{s.Value?.ToString() ?? "?"} {s.Name}"))}");
 			RivenOverlayWindow.Display(best, originX, originY);
+			return ScanOutcome.Found;
 		} finally {
 			gate.Release();
 		}
