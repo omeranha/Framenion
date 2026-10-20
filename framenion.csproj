@@ -2,7 +2,7 @@
 	<PropertyGroup>
 		<RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
 		<OutputType>WinExe</OutputType>
-		<Version>1.2.0</Version>
+		<Version>1.3.0</Version>
 		<Nullable>enable</Nullable>
 		<AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
