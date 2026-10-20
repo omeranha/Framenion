@@ -58,11 +58,10 @@
 		</PackageReference>
 		<PackageReference Include="Ecng.Lzma" Version="1.0.65" />
 		<PackageReference Include="OpenCvSharp4" Version="4.13.0.20260330" />
+		<!--Not referenced in code: Avalonia's Linux stack pulls Tmds.DBus.Protocol transitively,
+		    but at 0.90.3, which carries NU1903 (high severity). Pin forward to the patched build.-->
 		<PackageReference Include="Tmds.DBus.Protocol" Version="0.92.0" />
 		<AvaloniaResource Include="assets\**\*.*" />
-		<Content Include="assets\**\*">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</Content>
 	</ItemGroup>
 
 	<!--Windows reads text with the built-in Windows.Media.Ocr engine, so PaddleOCR and its

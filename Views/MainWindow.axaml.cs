@@ -128,13 +128,13 @@ public partial class MainWindow : Window
 
 		onProcessStateChanged = running => Dispatcher.UIThread.Post(() => {
 			if (running) {
-				WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "check_d.png"));
+				WarframeOpened.Source = GameData.GetOrCreateBitmap("avares://framenion/assets/check_d.png");
 				ToolTip.SetTip(WarframeOpened, "Warframe is up and running.");
 				if (AppData.AppSettings.EnableEELogRead) {
 					AppData.Monitor.Start();
 				}
 			} else {
-				WarframeOpened.Source = GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "uncheck_d.png"));
+				WarframeOpened.Source = GameData.GetOrCreateBitmap("avares://framenion/assets/uncheck_d.png");
 				ToolTip.SetTip(WarframeOpened, "Warframe is closed");
 				AppData.Monitor.Stop();
 			}
@@ -531,7 +531,7 @@ public partial class MainWindow : Window
 
 		var title = matches.Count == 1 ? "Fissure found" : $"{matches.Count} Fissures found";
 		var body = string.Join(Environment.NewLine, matches.Select(f => $"{(f.IsHard ? "Steel Path" : "Normal")} {f.MissionType} {f.Tier} ends in {f.TimeRemaining}"));
-		ToastWindow.Show(title, body, duration: TimeSpan.FromSeconds(8), icon: GameData.GetOrCreateBitmap(Path.Combine(AppContext.BaseDirectory, "assets", "void_fissure.png")));
+		ToastWindow.Show(title, body, duration: TimeSpan.FromSeconds(8), icon: GameData.GetOrCreateBitmap("avares://framenion/assets/void_fissure.png"));
 	}
 
 	private async Task LoadNotifiedFissures()

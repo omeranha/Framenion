@@ -1,4 +1,5 @@
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -86,6 +87,10 @@ public static class GameData
 	#endregion
 
 	#region Bitmaps
+	/// <summary>
+	/// Decodes an icon, caching the result. Accepts a filesystem path for downloaded icons or an
+	/// "avares://" URI for assets bundled into the executable.
+	/// </summary>
 	public static Bitmap? GetOrCreateBitmap(string localPath, int decodeWidth = 80)
 	{
 		if (string.IsNullOrEmpty(localPath)) return null;
@@ -93,15 +98,21 @@ public static class GameData
 		var lazy = AppData.BitmapCache.GetOrAdd(localPath, path =>
 			new Lazy<Bitmap?>(() => {
 				try {
-					if (!File.Exists(path)) return null;
-					using var fs = File.OpenRead(path);
-					return Bitmap.DecodeToWidth(fs, decodeWidth, BitmapInterpolationMode.LowQuality);
+					using var stream = OpenBitmapStream(path);
+					if (stream == null) return null;
+					return Bitmap.DecodeToWidth(stream, decodeWidth, BitmapInterpolationMode.LowQuality);
 				} catch (Exception ex) {
 					Log.Warn($"Could not decode icon '{path}'.", ex);
 					return null;
 				}
 			}, LazyThreadSafetyMode.ExecutionAndPublication));
 		return lazy.Value;
+	}
+
+	private static Stream? OpenBitmapStream(string path)
+	{
+		if (path.StartsWith("avares://", StringComparison.Ordinal)) return AssetLoader.Open(new Uri(path));
+		return File.Exists(path) ? File.OpenRead(path) : null;
 	}
 
 	public static void ClearBitmapCache()
@@ -296,7 +307,7 @@ public static class GameData
 	/// <summary>Builds the equipment and relic lists, downloading any icons they need.</summary>
 	public static async Task BuildCatalogAsync()
 	{
-		string blueprintPath = Path.Combine(AppContext.BaseDirectory, "assets", "blueprint.png");
+		string blueprintPath = "avares://framenion/assets/blueprint.png";
 
 		var equipment = ExportWarframes
 			.Concat(ExportWeapons.Where(kvp => !ShouldSkipWeapon(kvp.Key, kvp.Value)))
