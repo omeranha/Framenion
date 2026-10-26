@@ -91,6 +91,19 @@
             <Setter Property="Height" Value="16"/>
             <Setter Property="Stretch" Value="Uniform"/>
         </Style>
+
+        <Style Selector="Button.chip">
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="MinHeight" Value="28"/>
+        </Style>
+
+        <Style Selector="TextBlock.chipLabel">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryForegroundBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,2,0"/>
+        </Style>
     </Application.Styles>
     <TrayIcon.Icons>
         <TrayIcons>

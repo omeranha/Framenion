@@ -19,6 +19,7 @@
                 <!-- Menu Buttons -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
                     <Button Name="ItemsButton" Content="Equipment" Classes="selected" Click="OnItemsClick" Background="{DynamicResource SurfaceBackgroundBrush}" Padding="20,10"/>
+                    <Button Name="InventoryButton" Content="Inventory" Click="OnInventoryClick" Padding="20,10" Background="{DynamicResource SurfaceBackgroundBrush}"/>
                     <Button Name="RelicsButton" Content="Relics" Click="OnRelicsClick" Padding="20,10" Background="{DynamicResource SurfaceBackgroundBrush}"/>
                     <Button Name="RivensButton" Content="Rivens" Click="OnRivensClick" Padding="20,10" Background="{DynamicResource SurfaceBackgroundBrush}"/>
                 </StackPanel>
@@ -313,9 +314,246 @@
             </Grid>
 
             <Grid Grid.Column="0">
+                <!-- Inventory Content -->
+                <Border Name="InventoryContent" IsVisible="False" Padding="20">
+                    <Grid RowDefinitions="Auto,Auto,Auto,*">
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,40,40,40,200" Margin="0,0,0,10">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Name="FilterInvAllButton" Content="All" Click="OnInventoryCategoryClick" Tag="All" Classes="selected" Padding="12,6"/>
+                                <Button Name="FilterInvPartsButton" Content="Parts" Click="OnInventoryCategoryClick" Tag="Component" Padding="12,6" ToolTip.Tip="Chassis, neuroptics, systems, barrels, links and the rest"/>
+                                <Button Name="FilterInvBlueprintsButton" Content="Blueprints" Click="OnInventoryCategoryClick" Tag="Blueprint" Padding="12,6"/>
+                                <Button Name="FilterInvRelicsButton" Content="Relics" Click="OnInventoryCategoryClick" Tag="Relic" Padding="12,6"/>
+                                <Button Name="FilterInvModsButton" Content="Mods" Click="OnInventoryCategoryClick" Tag="Mod" Padding="12,6"/>
+                                <Button Name="FilterInvArcanesButton" Content="Arcanes" Click="OnInventoryCategoryClick" Tag="Arcane" Padding="12,6"/>
+                            </StackPanel>
+
+                            <Button Grid.Column="2" Content="−" Click="OnItemsZoomOutClick" Classes="iconButton" ToolTip.Tip="Zoom out" Padding="10,6"/>
+                            <Button Grid.Column="3" Content="%" Click="OnItemsZoomResetClick" Classes="iconButton" ToolTip.Tip="Reset zoom" Padding="10,6"/>
+                            <Button Grid.Column="4" Content="+" Click="OnItemsZoomInClick" Classes="iconButton" ToolTip.Tip="Zoom in" Padding="10,6"/>
+
+                            <TextBox Grid.Column="5"
+                                     Name="InventorySearchBox"
+                                     PlaceholderText="Search inventory"
+                                     Padding="8,8"
+                                     TextChanged="OnSearchInventoryTextChanged"
+                                     VerticalAlignment="Center"
+                                     Background="{DynamicResource PanelBackgroundBrush}"
+                                     Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                     BorderBrush="{DynamicResource ControlBorderBrush}"
+                                     BorderThickness="1"
+                                     CornerRadius="4"/>
+                        </Grid>
+
+                        <!-- Narrowing filters. Clicking an active chip clears it, so each group
+                             is a tri-state without needing an explicit "any" chip. -->
+                        <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,16" ItemSpacing="16" LineSpacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="Prime" Classes="chipLabel"/>
+                                <Button Name="InvPrimeNormalButton" Content="Normal" Tag="Normal" Click="OnInventoryPrimeClick" Classes="chip"/>
+                                <Button Name="InvPrimePrimeButton" Content="Prime" Tag="Prime" Click="OnInventoryPrimeClick" Classes="chip"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="Whether the equipment this part builds is already mastered. Relics, mods and arcanes build nothing, so they drop out while this is set.">
+                                <TextBlock Text="Mastered" Classes="chipLabel"/>
+                                <Button Name="InvMasteredYesButton" Content="Yes" Tag="Yes" Click="OnInventoryMasteredClick" Classes="chip"/>
+                                <Button Name="InvMasteredNoButton" Content="No" Tag="No" Click="OnInventoryMasteredClick" Classes="chip"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="Keep only stacks you own more than one of">
+                                <TextBlock Text="Amount" Classes="chipLabel"/>
+                                <Button Name="InvAmountAnyButton" Content="Any" Tag="0" Click="OnInventoryAmountClick" Classes="chip selected"/>
+                                <Button Name="InvAmountManyButton" Content="&gt;1" Tag="2" Click="OnInventoryAmountClick" Classes="chip"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="Min plat" Classes="chipLabel"/>
+                                <TextBox Name="InventoryMinPlatinumBox"
+                                         PlaceholderText="Any"
+                                         Width="64"
+                                         Padding="6,4"
+                                         FontSize="12"
+                                         TextChanged="OnInventoryMinPlatinumChanged"
+                                         VerticalAlignment="Center"
+                                         Background="{DynamicResource PanelBackgroundBrush}"
+                                         Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                         BorderBrush="{DynamicResource ControlBorderBrush}"
+                                         BorderThickness="1"
+                                         CornerRadius="4"/>
+                                <TextBlock Text="p" Classes="chipLabel"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="Sort" Classes="chipLabel"/>
+                                <ComboBox Name="InventorySortBox"
+                                          ItemsSource="{Binding #RootWindow.InventorySortOptions}"
+                                          SelectedIndex="0"
+                                          SelectionChanged="OnInventorySortChanged"
+                                          MinWidth="170"
+                                          FontSize="12"
+                                          VerticalAlignment="Center"
+                                          ToolTip.Tip="Sort inventory"/>
+                                <Button Name="InventorySortDirectionButton"
+                                        Content="↓"
+                                        Click="OnInventorySortDirectionClick"
+                                        Classes="iconButton"
+                                        ToolTip.Tip="Highest first"/>
+                            </StackPanel>
+                        </WrapPanel>
+
+                        <!-- Value strip: what the filtered view is worth, kept out of the
+                             toolbar so a long total cannot squeeze the controls. -->
+                        <Border Grid.Row="2"
+                                Background="{DynamicResource SurfaceBackgroundBrush}"
+                                CornerRadius="6"
+                                BorderBrush="{DynamicResource ControlBorderBrush}"
+                                BorderThickness="1"
+                                Padding="12,7"
+                                Margin="0,0,0,10">
+                            <TextBlock Name="InventoryCountText"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                        </Border>
+
+                        <Border Grid.Row="3"
+                                Background="{DynamicResource PanelBackgroundBrush}"
+                                CornerRadius="8"
+                                BorderBrush="{DynamicResource ControlBorderBrush}"
+                                BorderThickness="1">
+
+                            <ScrollViewer Name="InventoryScrollViewer"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsRepeater Name="InventoryList">
+                                    <ItemsRepeater.Layout>
+                                        <WrapLayout Orientation="Horizontal"/>
+                                    </ItemsRepeater.Layout>
+
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate x:DataType="src:InventoryItem">
+                                            <Border Background="{DynamicResource SurfaceBackgroundBrush}"
+                                                    CornerRadius="6"
+                                                    Margin="8"
+                                                    Padding="12"
+                                                    Width="{Binding #RootWindow.ItemsTileWidth}"
+                                                    MinHeight="{Binding #RootWindow.InventoryTileMinHeight}"
+                                                    BorderBrush="{DynamicResource ControlBorderBrush}"
+                                                    BorderThickness="2"
+                                                    ToolTip.Tip="{Binding DetailsTooltip}">
+                                                <Border.Styles>
+                                                    <Style Selector="Border:pointerover">
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                    </Style>
+                                                </Border.Styles>
+
+                                                <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+                                                    <!-- Icon, with the stack count left and the ducat flip verdict right -->
+                                                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+                                                        <TextBlock Grid.Column="0"
+                                                                   Text="{Binding QuantityText}"
+                                                                   Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                                                   FontWeight="Bold"
+                                                                   FontSize="12"
+                                                                   VerticalAlignment="Top"/>
+
+                                                        <Border Grid.Column="1"
+                                                                Width="{Binding #RootWindow.ItemsIconSize}"
+                                                                Height="{Binding #RootWindow.ItemsIconSize}"
+                                                                HorizontalAlignment="Center"
+                                                                Background="{DynamicResource AppBackgroundBrush}"
+                                                                CornerRadius="4"
+                                                                Margin="0,0,0,8"
+                                                                BorderBrush="{DynamicResource ControlBorderBrush}"
+                                                                BorderThickness="1">
+                                                            <Image Source="{Binding Icon}" Stretch="Uniform"/>
+                                                        </Border>
+
+                                                        <Border Grid.Column="2"
+                                                                Background="{Binding RatioColor}"
+                                                                CornerRadius="4"
+                                                                Padding="6,2"
+                                                                VerticalAlignment="Top"
+                                                                IsVisible="{Binding HasRatio}"
+                                                                ToolTip.Tip="Ducats per platinum">
+                                                            <TextBlock Text="{Binding RatioText}"
+                                                                       FontSize="12"
+                                                                       FontWeight="Bold"
+                                                                       Foreground="#101010"/>
+                                                        </Border>
+                                                    </Grid>
+
+                                                    <TextBlock Grid.Row="1"
+                                                               Text="{Binding DisplayName}"
+                                                               Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                                               FontWeight="SemiBold"
+                                                               TextWrapping="Wrap"
+                                                               TextAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+
+                                                    <TextBlock Grid.Row="2"
+                                                               Text="{Binding Category}"
+                                                               Foreground="{DynamicResource SecondaryForegroundBrush}"
+                                                               FontSize="11"
+                                                               TextAlignment="Center"
+                                                               HorizontalAlignment="Center"
+                                                               Margin="0,2,0,8"/>
+
+                                                    <!-- Unit prices -->
+                                                    <StackPanel Grid.Row="3"
+                                                                Orientation="Horizontal"
+                                                                Spacing="12"
+                                                                HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center">
+                                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                                            <Image Source="avares://framenion/assets/platinum.png"
+                                                                   Width="18" Height="18"
+                                                                   VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding PlatinumText}"
+                                                                       Foreground="{Binding PlatinumColor}"
+                                                                       FontWeight="Bold"
+                                                                       FontSize="13"
+                                                                       VerticalAlignment="Center"
+                                                                       ToolTip.Tip="{Binding PlatinumTooltip}"/>
+                                                        </StackPanel>
+
+                                                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasDucats}">
+                                                            <Image Source="avares://framenion/assets/ducats.png"
+                                                                   Width="18" Height="18"
+                                                                   VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding DucatsText}"
+                                                                       Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                                                       FontWeight="Bold"
+                                                                       FontSize="13"
+                                                                       VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+
+                                                    <!-- What the whole stack is worth, which is what decides if a tile matters -->
+                                                    <TextBlock Grid.Row="4"
+                                                               Foreground="{DynamicResource SecondaryForegroundBrush}"
+                                                               FontSize="11"
+                                                               TextAlignment="Center"
+                                                               HorizontalAlignment="Center"
+                                                               Margin="0,8,0,0"
+                                                               IsVisible="{Binding HasPlatinum}">
+                                                        <Run Text="Stack"/>
+                                                        <Run Text="{Binding TotalPlatinumText}"/>
+                                                        <Run Text="plat"/>
+                                                    </TextBlock>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Grid Grid.Column="0">
                 <!-- Relics Content -->
-                <Border Name="RelicsContent" IsVisible="False" Padding="20">
-                    <Grid RowDefinitions="Auto,Auto,*">
+                <Border Name="RelicsContent" IsVisible="False" Padding="20">                    <Grid RowDefinitions="Auto,Auto,*">
                         <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,40,40,40,200" Margin="0,0,0,20">
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <Button Name="FilterAllRelicsButton" Click="OnFilterRelicClick"

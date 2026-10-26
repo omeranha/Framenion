@@ -26,6 +26,13 @@ public class ItemData(string slug, string ducats, string price, string volume)
 /// <summary>A display name, icon and ducat value resolved from the export for one uniqueName.</summary>
 public sealed record CatalogEntry(string Name, string Icon, int Ducats);
 
+/// <summary>
+/// A warframe.market catalogue entry keyed by the game's own uniqueName, which the market
+/// publishes as "gameRef". The inventory dump stores that same name, so inventory rows resolve
+/// to a listing exactly rather than through the display-name matching the overlays fall back on.
+/// </summary>
+public sealed record MarketItem(string Slug, string Name, string Category, int Ducats, double Platinum, int Volume, bool FromClosedOrders, bool IsPrime);
+
 public static class GameData
 {
 	public static readonly IReadOnlyDictionary<string, (string name, string color)> relicType = new Dictionary<string, (string, string)>(StringComparer.Ordinal) {
@@ -48,6 +55,9 @@ public static class GameData
 	public static List<VoidFissure> Fissures { get; set; } = [];
 	public static List<Item> ItemsList { get; set; } = [];
 	public static List<Relic> RelicList { get; set; } = [];
+
+	/// <summary>Owned stacks with their market and ducat value, read from the inventory dump.</summary>
+	public static List<InventoryItem> InventoryList { get; set; } = [];
 
 	/// <summary>Owned riven mods, read from the inventory dump rather than the export.</summary>
 	public static List<Riven.OwnedRiven> RivenList { get; set; } = [];
@@ -84,6 +94,9 @@ public static class GameData
 	public static FrozenSet<string> Level40Types { get; private set; } = FrozenSet<string>.Empty;
 
 	public static FrozenDictionary<string, ItemData> WFMarketData { get; set; } = FrozenDictionary<string, ItemData>.Empty;
+
+	/// <summary>The same market catalogue keyed by the game's uniqueName, for inventory lookups.</summary>
+	public static FrozenDictionary<string, MarketItem> WFMarketByGameRef { get; private set; } = FrozenDictionary<string, MarketItem>.Empty;
 	#endregion
 
 	#region Bitmaps
@@ -407,6 +420,21 @@ public static class GameData
 		return "Intact";
 	}
 
+	/// <summary>
+	/// Splits a relic's uniqueName into the base projection and its refinement. The market lists
+	/// one entry per relic whatever its refinement, so the metal suffix has to come off before a
+	/// price lookup; the refinement itself is still worth showing.
+	/// </summary>
+	public static (string BaseName, string Refinement) SplitRelicRefinement(string uniqueName)
+	{
+		if (!uniqueName.Contains("/Projections/", StringComparison.Ordinal)) return (uniqueName, "");
+
+		foreach (var (suffix, quality) in relicQualities) {
+			if (uniqueName.EndsWith(suffix, StringComparison.Ordinal)) return (uniqueName[..^suffix.Length], quality);
+		}
+		return (uniqueName, "Intact");
+	}
+
 	private static string RarityColor(string rarity) => rarity switch {
 		"COMMON" => "#95543B",
 		"UNCOMMON" => "#D1CFD1",
@@ -485,6 +513,10 @@ public static class GameData
 			}
 
 			var builder = new Dictionary<string, ItemData>(StringComparer.Ordinal);
+			var refBuilder = new Dictionary<string, MarketItem>(StringComparer.OrdinalIgnoreCase);
+			// The wfinfo feed above only quotes prime parts and sets, which cannot price a whole
+			// inventory; the bulk dump covers every item the market lists.
+			var quotes = await MarketPrices.LoadAsync();
 			await using (var itemsRead = File.OpenRead(itemsFile)) {
 				using var itemsDoc = await JsonDocument.ParseAsync(itemsRead);
 				if (!itemsDoc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array) {
@@ -500,18 +532,83 @@ public static class GameData
 						&& en.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? "" : "";
 					if (string.IsNullOrEmpty(name)) continue;
 
-					var ducats = item.TryGetProperty("ducats", out var d) && d.ValueKind == JsonValueKind.Number ? d.GetInt32().ToString() : "";
+					int ducatValue = item.TryGetProperty("ducats", out var d) && d.ValueKind == JsonValueKind.Number ? d.GetInt32() : 0;
 					priceData.TryGetValue(name, out var priceInfo);
-					builder[name] = new ItemData(slug, ducats, priceInfo.Price ?? "", priceInfo.Volume ?? "");
+					builder[name] = new ItemData(slug, ducatValue > 0 ? ducatValue.ToString() : "", priceInfo.Price ?? "", priceInfo.Volume ?? "");
+
+					var gameRef = item.TryGetProperty("gameRef", out var g) ? g.GetString() ?? "" : "";
+					if (gameRef.Length == 0) continue;
+
+					var tags = ReadTags(item);
+					var category = CategoryFromTags(tags);
+					// A set and its base item can publish the same gameRef (a prime warframe's
+					// set points at the warframe). Inventory stacks are parts, never sets, so
+					// the non-set entry has to win or every such row would be priced as a set.
+					if (refBuilder.TryGetValue(gameRef, out var existing) && existing.Category != "Set" && category == "Set") continue;
+
+					// Fall back to the narrower feed where the dump has no history for an item.
+					// That feed's average is trade-derived, so it counts as a closed figure.
+					var quote = quotes.GetValueOrDefault(name);
+					double platinum = quote?.Platinum ?? ParseMarketNumber(priceInfo.Price);
+					int volume = quote?.Volume ?? (int)ParseMarketNumber(priceInfo.Volume);
+
+					refBuilder[gameRef] = new MarketItem(slug, name, category, ducatValue, platinum, volume,
+						quote?.FromClosedOrders ?? true, tags.Contains("prime"));
 				}
 			}
 
 			WFMarketData = builder.ToFrozenDictionary(StringComparer.Ordinal);
-			Log.Info($"warframe.market prices loaded: {WFMarketData.Count} entries.");
+			WFMarketByGameRef = refBuilder.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+			Log.Info($"warframe.market prices loaded: {WFMarketData.Count} entries, {WFMarketByGameRef.Count} resolvable by uniqueName.");
 		} catch (Exception ex) {
 			Log.Warn("Could not load warframe.market prices; continuing without them.", ex);
 		}
 	}
+
+	/// <summary>
+	/// Picks one grouping label from the market's tag list. The tags are flat and an item carries
+	/// several ("blueprint", "prime", "warframe"), so the most specific one wins.
+	/// </summary>
+	private static string CategoryFromTags(HashSet<string> tags)
+	{
+		foreach (var (tag, label) in marketCategories) {
+			if (tags.Contains(tag)) return label;
+		}
+		return "Other";
+	}
+
+	private static HashSet<string> ReadTags(JsonElement item)
+	{
+		var present = new HashSet<string>(StringComparer.Ordinal);
+		if (!item.TryGetProperty("tags", out var tags) || tags.ValueKind != JsonValueKind.Array) return present;
+
+		foreach (var tag in tags.EnumerateArray()) {
+			if (tag.GetString() is string value && value.Length > 0) present.Add(value);
+		}
+		return present;
+	}
+
+	/// <summary>Market tags in priority order; the first match becomes the row's category.</summary>
+	private static readonly (string Tag, string Label)[] marketCategories = [
+		("relic", "Relic"),
+		("arcane_enhancement", "Arcane"),
+		("set", "Set"),
+		("mod", "Mod"),
+		("blueprint", "Blueprint"),
+		("component", "Component"),
+		("weapon", "Weapon"),
+		("scene", "Scene"),
+		("misc", "Misc"),
+		// A couple of prime parts (the Kavasa collar's band and buckle) carry no structural tag
+		// at all. Anything still unclassified but marked prime is a part, so it lands with them.
+		("prime", "Component"),
+	];
+
+	/// <summary>The price feed quotes everything as a string, and leaves it out when unknown.</summary>
+	private static double ParseMarketNumber(string? value)
+		=> double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsed) && parsed > 0
+			? parsed
+			: 0;
 
 	public static async Task ExtractGameInfo()
 	{

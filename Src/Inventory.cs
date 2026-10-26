@@ -51,6 +51,7 @@ public static class Inventory
 
 		ApplyToCatalog(root);
 		GameData.RivenList = await Riven.RivenInventory.BuildAsync(root);
+		GameData.InventoryList = await InventoryCatalog.BuildAsync(root);
 
 		return new InventorySummary {
 			Platinum = platinum,

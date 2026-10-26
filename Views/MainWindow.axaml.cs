@@ -8,6 +8,7 @@ using framenion.Src.Riven;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -18,11 +19,13 @@ namespace framenion;
 public partial class MainWindow : Window
 {
 	private readonly BulkObservableCollection<Item> displayedItems = [];
+	private readonly BulkObservableCollection<InventoryItem> displayedInventory = [];
 	private readonly BulkObservableCollection<Relic> displayedRelics = [];
 	private readonly BulkObservableCollection<OwnedRiven> displayedRivens = [];
 	private readonly BulkObservableCollection<VoidFissure> displayedFissures = [];
 
 	private string searchText = string.Empty;
+	private string searchInventoryText = string.Empty;
 	private string searchRelicsText = string.Empty;
 	private string searchRivensText = string.Empty;
 	private string currentItemsFilter = "All";
@@ -31,11 +34,21 @@ public partial class MainWindow : Window
 	private string currentFissureFilter = "Normal";
 	private bool hideUnownedRelics;
 
+	private string currentInventoryCategory = "All";
+	private string inventoryPrimeFilter = "All";
+	private string inventoryMasteredFilter = "All";
+	private int inventoryMinAmount;
+	private double inventoryMinPlatinum;
+	private bool inventorySortDescending = true;
+
 	/// <summary>Sort orders offered on the relics tab.</summary>
 	public List<string> RelicSortOptions { get; } = ["Era", "Name", "Owned count", "Refinement"];
 
 	/// <summary>Sort orders offered on the rivens tab.</summary>
 	public List<string> RivenSortOptions { get; } = ["Grade", "Weapon", "Disposition", "Rolls", "Mastery rank"];
+
+	/// <summary>Sort orders offered on the inventory tab.</summary>
+	public List<string> InventorySortOptions { get; } = ["Stack platinum", "Ducats per platinum", "Platinum", "Ducats", "Quantity", "Name"];
 
 	private readonly string notifiedFissuresFile = Path.Combine(AppData.AppDataDir, "notified_fissures.txt");
 
@@ -46,6 +59,8 @@ public partial class MainWindow : Window
 	public DispatcherTimer fissureUpdateTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
 	private readonly Debouncer itemsSearchDebounce = new();
+	private readonly Debouncer inventorySearchDebounce = new();
+	private readonly Debouncer inventoryMinPlatinumDebounce = new();
 	private readonly Debouncer relicsSearchDebounce = new();
 	private readonly Debouncer rivensSearchDebounce = new();
 
@@ -64,6 +79,10 @@ public partial class MainWindow : Window
 
 	public static readonly StyledProperty<double> ItemsIconSizeProperty =
 		AvaloniaProperty.Register<MainWindow, double>(nameof(ItemsIconSize), 72d);
+
+	// The inventory tile carries no ingredient grid, so it needs less room than an equipment one.
+	public static readonly StyledProperty<double> InventoryTileMinHeightProperty =
+		AvaloniaProperty.Register<MainWindow, double>(nameof(InventoryTileMinHeight), 185d);
 
 	public static readonly StyledProperty<bool> IsLoadingProperty =
 		AvaloniaProperty.Register<MainWindow, bool>(nameof(IsLoading));
@@ -84,6 +103,12 @@ public partial class MainWindow : Window
 	{
 		get => GetValue(ItemsIconSizeProperty);
 		set => SetValue(ItemsIconSizeProperty, value);
+	}
+
+	public double InventoryTileMinHeight
+	{
+		get => GetValue(InventoryTileMinHeightProperty);
+		set => SetValue(InventoryTileMinHeightProperty, value);
 	}
 
 	public bool IsLoading
@@ -107,6 +132,7 @@ public partial class MainWindow : Window
 		DataContext = this;
 		// Bound once; refreshes replace the contents in place.
 		ItemsList.ItemsSource = displayedItems;
+		InventoryList.ItemsSource = displayedInventory;
 		RelicsList.ItemsSource = displayedRelics;
 		RivensList.ItemsSource = displayedRivens;
 		FissuresList.ItemsSource = displayedFissures;
@@ -195,6 +221,8 @@ public partial class MainWindow : Window
 		fissureUpdateTimer?.Stop();
 		AppData.OcrEngine?.Dispose();
 		itemsSearchDebounce.Dispose();
+		inventorySearchDebounce.Dispose();
+		inventoryMinPlatinumDebounce.Dispose();
 		relicsSearchDebounce.Dispose();
 		AppData.Monitor?.Dispose();
 		GameData.ClearBitmapCache();
@@ -288,6 +316,7 @@ public partial class MainWindow : Window
 			var summary = await Task.Run(Inventory.LoadAsync);
 			ApplyInventorySummary(summary);
 			RefreshItemsList();
+			RefreshInventoryList();
 			RefreshRelicsList();
 			RefreshRivensList();
 		} catch (Exception ex) {
@@ -377,6 +406,190 @@ public partial class MainWindow : Window
 
 		// Assigning in bulk raises a single Reset instead of a change per item.
 		displayedItems.Replace(filtered);
+	}
+
+	/// <summary>
+	/// Filters and sorts the owned stacks. The default order is by what the whole stack is worth,
+	/// since that is what decides whether a row is worth acting on at all.
+	/// </summary>
+	private void RefreshInventoryList()
+	{
+		IEnumerable<InventoryItem> filtered = GameData.InventoryList;
+
+		if (currentInventoryCategory != "All") {
+			filtered = filtered.Where(r => string.Equals(r.Category, currentInventoryCategory, StringComparison.Ordinal));
+		}
+
+		if (inventoryPrimeFilter != "All") {
+			bool wantPrime = inventoryPrimeFilter == "Prime";
+			filtered = filtered.Where(r => r.IsPrime == wantPrime);
+		}
+
+		// Strict tri-state, as in WFHelper: a row with nothing masterable behind it has no
+		// answer to give, so it drops out while the filter is on rather than counting as "no".
+		if (inventoryMasteredFilter != "All") {
+			bool wantMastered = inventoryMasteredFilter == "Yes";
+			filtered = filtered.Where(r => r.ParentMastered == wantMastered);
+		}
+
+		if (inventoryMinAmount > 0) {
+			filtered = filtered.Where(r => r.OwnedCount >= inventoryMinAmount);
+		}
+
+		if (inventoryMinPlatinum > 0) {
+			filtered = filtered.Where(r => r.Platinum >= inventoryMinPlatinum);
+		}
+
+		if (!string.IsNullOrWhiteSpace(searchInventoryText)) {
+			var query = searchInventoryText.Trim();
+			// The internal name is searchable too: it is the only way to pin down an item whose
+			// market label is ambiguous.
+			filtered = filtered.Where(r => r.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+				|| r.Category.Contains(query, StringComparison.OrdinalIgnoreCase)
+				|| r.ItemType.Contains(query, StringComparison.OrdinalIgnoreCase));
+		}
+
+		var visible = SortInventory(filtered).ToList();
+		displayedInventory.Replace(visible);
+
+		if (GameData.InventoryList.Count == 0) {
+			InventoryCountText.Text = "No inventory found — refresh the inventory";
+			return;
+		}
+
+		double platinum = visible.Sum(r => r.TotalPlatinum);
+		int ducats = visible.Sum(r => r.Ducats * r.OwnedCount);
+		int unpriced = visible.Count(r => !r.HasPlatinum);
+
+		// "N of M" only earns its width while a filter is actually narrowing the list.
+		var shown = visible.Count == GameData.InventoryList.Count
+			? $"{visible.Count:N0} items"
+			: $"{visible.Count:N0} of {GameData.InventoryList.Count:N0} items";
+
+		// An unpriced row makes the total a floor rather than an estimate, so say so instead of
+		// quoting a number that silently leaves items out.
+		var value = unpriced > 0
+			? $"≥ {platinum:N0} plat ({unpriced:N0} unpriced)"
+			: $"{platinum:N0} plat";
+
+		InventoryCountText.Text = $"{shown}  ·  {value}  ·  {ducats:N0} ducats";
+	}
+
+	private IEnumerable<InventoryItem> SortInventory(IEnumerable<InventoryItem> rows)
+	{
+		var ordered = (InventorySortBox?.SelectedItem as string) switch {
+			"Ducats per platinum" => OrderInventoryBy(rows, r => r.DucatsPerPlatinum ?? -1),
+			"Platinum" => OrderInventoryBy(rows, r => r.Platinum),
+			"Ducats" => OrderInventoryBy(rows, r => r.Ducats),
+			"Quantity" => OrderInventoryBy(rows, r => r.OwnedCount),
+			"Name" => inventorySortDescending
+				? rows.OrderByDescending(r => r.DisplayName, StringComparer.OrdinalIgnoreCase)
+				: rows.OrderBy(r => r.DisplayName, StringComparer.OrdinalIgnoreCase),
+			_ => OrderInventoryBy(rows, r => r.TotalPlatinum),
+		};
+
+		return ordered.ThenBy(r => r.DisplayName, StringComparer.OrdinalIgnoreCase);
+	}
+
+	private IOrderedEnumerable<InventoryItem> OrderInventoryBy(IEnumerable<InventoryItem> rows, Func<InventoryItem, double> key)
+		=> inventorySortDescending ? rows.OrderByDescending(key) : rows.OrderBy(key);
+
+	/// <summary>
+	/// Value-like orders read best-first and names read A to Z, so switching the sort key picks
+	/// the direction that makes it useful instead of keeping the previous one.
+	/// </summary>
+	private static bool DefaultsToDescending(string? sortKey) => sortKey != "Name";
+
+	private void OnInventoryCategoryClick(object? sender, RoutedEventArgs e)
+	{
+		if (sender is not Button button) return;
+
+		foreach (var other in (Button[])[FilterInvAllButton, FilterInvPartsButton, FilterInvBlueprintsButton,
+			FilterInvRelicsButton, FilterInvModsButton, FilterInvArcanesButton]) {
+			other.Classes.Set("selected", false);
+		}
+
+		button.Classes.Set("selected", true);
+		currentInventoryCategory = button.Tag?.ToString() ?? "All";
+		RefreshInventoryList();
+	}
+
+	/// <summary>
+	/// Drives a chip group where clicking the active chip clears the filter, so a two-chip group
+	/// covers three states without spending width on an explicit "any".
+	/// </summary>
+	private static string ToggleChip(Button clicked, Button[] group, string current)
+	{
+		var value = clicked.Tag?.ToString() ?? "All";
+		var next = string.Equals(current, value, StringComparison.Ordinal) ? "All" : value;
+		foreach (var button in group) {
+			button.Classes.Set("selected", string.Equals(button.Tag?.ToString(), next, StringComparison.Ordinal));
+		}
+		return next;
+	}
+
+	private void OnInventoryPrimeClick(object? sender, RoutedEventArgs e)
+	{
+		if (sender is not Button button) return;
+
+		inventoryPrimeFilter = ToggleChip(button, [InvPrimeNormalButton, InvPrimePrimeButton], inventoryPrimeFilter);
+		RefreshInventoryList();
+	}
+
+	private void OnInventoryMasteredClick(object? sender, RoutedEventArgs e)
+	{
+		if (sender is not Button button) return;
+
+		inventoryMasteredFilter = ToggleChip(button, [InvMasteredYesButton, InvMasteredNoButton], inventoryMasteredFilter);
+		RefreshInventoryList();
+	}
+
+	private void OnInventoryAmountClick(object? sender, RoutedEventArgs e)
+	{
+		if (sender is not Button button) return;
+
+		inventoryMinAmount = button.Tag?.ToString() == "2" ? 2 : 0;
+		InvAmountAnyButton.Classes.Set("selected", inventoryMinAmount == 0);
+		InvAmountManyButton.Classes.Set("selected", inventoryMinAmount == 2);
+		RefreshInventoryList();
+	}
+
+	private async void OnInventoryMinPlatinumChanged(object? sender, TextChangedEventArgs e)
+	{
+		// An unparseable or empty box means no floor, which is what the "Any" placeholder says.
+		inventoryMinPlatinum = double.TryParse(InventoryMinPlatinumBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) && parsed > 0
+			? parsed
+			: 0;
+		if (await inventoryMinPlatinumDebounce.WaitAsync()) RefreshInventoryList();
+	}
+
+	private void OnInventorySortChanged(object? sender, SelectionChangedEventArgs e)
+	{
+		// Fires while the window is still being built, before the list exists.
+		if (!IsLoaded) return;
+
+		inventorySortDescending = DefaultsToDescending(InventorySortBox.SelectedItem as string);
+		ApplySortDirectionGlyph();
+		RefreshInventoryList();
+	}
+
+	private void OnInventorySortDirectionClick(object? sender, RoutedEventArgs e)
+	{
+		inventorySortDescending = !inventorySortDescending;
+		ApplySortDirectionGlyph();
+		RefreshInventoryList();
+	}
+
+	private void ApplySortDirectionGlyph()
+	{
+		InventorySortDirectionButton.Content = inventorySortDescending ? "↓" : "↑";
+		ToolTip.SetTip(InventorySortDirectionButton, inventorySortDescending ? "Highest first" : "Lowest first");
+	}
+
+	private async void OnSearchInventoryTextChanged(object? sender, TextChangedEventArgs e)
+	{
+		searchInventoryText = InventorySearchBox.Text ?? string.Empty;
+		if (await inventorySearchDebounce.WaitAsync()) RefreshInventoryList();
 	}
 
 	private void RefreshRelicsList()
@@ -560,13 +773,16 @@ public partial class MainWindow : Window
 
 	private void OnItemsClick(object? sender, RoutedEventArgs e) => SelectTab(ItemsButton);
 
+	private void OnInventoryClick(object? sender, RoutedEventArgs e) => SelectTab(InventoryButton);
+
 	private void OnRelicsClick(object? sender, RoutedEventArgs e) => SelectTab(RelicsButton);
 
 	private void OnRivensClick(object? sender, RoutedEventArgs e) => SelectTab(RivensButton);
 
 	private void SelectTab(Button selected)
 	{
-		foreach (var (button, content) in (( Button, Border)[])[(ItemsButton, ItemsContent), (RelicsButton, RelicsContent), (RivensButton, RivensContent)]) {
+		foreach (var (button, content) in ((Button, Border)[])[(ItemsButton, ItemsContent), (InventoryButton, InventoryContent),
+			(RelicsButton, RelicsContent), (RivensButton, RivensContent)]) {
 			bool active = ReferenceEquals(button, selected);
 			button.Classes.Set("selected", active);
 			content.IsVisible = active;
@@ -681,6 +897,7 @@ public partial class MainWindow : Window
 			var summary = await Task.Run(Inventory.LoadAsync);
 			ApplyInventorySummary(summary);
 			RefreshItemsList();
+			RefreshInventoryList();
 			RefreshRelicsList();
 			RefreshRivensList();
 		} catch (Exception ex) {
@@ -722,11 +939,14 @@ public partial class MainWindow : Window
 		itemsZoom = newZoom;
 		ItemsTileWidth = Math.Round(200 * itemsZoom);
 		ItemsTileMinHeight = Math.Round(245 * itemsZoom);
+		InventoryTileMinHeight = Math.Round(185 * itemsZoom);
 		// The icon used to stay at a fixed size, so zooming only added whitespace.
 		ItemsIconSize = Math.Round(72 * itemsZoom);
 
 		ItemsList.InvalidateMeasure();
 		ItemsList.InvalidateArrange();
+		InventoryList.InvalidateMeasure();
+		InventoryList.InvalidateArrange();
 		RelicsList.InvalidateMeasure();
 		RelicsList.InvalidateArrange();
 	}
