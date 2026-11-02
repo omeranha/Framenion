@@ -402,3 +402,6 @@ FodyWeavers.xsd
 *.bat
 /.github
 /tests
+/.vscode
+/.kiro
+DESIGN.md

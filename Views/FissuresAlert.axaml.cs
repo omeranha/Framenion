@@ -24,6 +24,7 @@ public partial class FissuresAlert : Window
 		InitializeComponent();
 		DataContext = this;
 		WindowStartupLocation = WindowStartupLocation.CenterOwner;
+		this.UseDarkTitleBar();
 
 		// Mission and planet names come straight from the official region table, which is
 		// already localized; the old language-dictionary lookup no longer exists.

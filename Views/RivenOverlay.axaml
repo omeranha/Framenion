@@ -12,7 +12,7 @@
         Background="{DynamicResource RewardWindowBackgroundBrush}"
         Width="340">
 
-    <Border Padding="14" BorderThickness="1" BorderBrush="{DynamicResource ControlBorderBrush}" CornerRadius="6">
+    <Border Padding="14" BorderThickness="1" BorderBrush="{DynamicResource ControlBorderBrush}" CornerRadius="0">
         <Grid RowDefinitions="Auto,Auto,Auto,Auto">
 
             <!-- Weapon and overall grade -->
@@ -26,7 +26,7 @@
                            VerticalAlignment="Center"/>
                 <Border Grid.Column="1"
                         Background="{Binding OverallGradeBrush}"
-                        CornerRadius="4"
+                        CornerRadius="0"
                         Padding="10,2"
                         VerticalAlignment="Center"
                         IsVisible="{Binding HasGrade}">
@@ -80,7 +80,7 @@
                                        VerticalAlignment="Center"/>
                             <Border Grid.Column="2"
                                     Background="{Binding Grade, Converter={x:Static local:RivenOverlayWindow.GradeBrushConverter}}"
-                                    CornerRadius="3"
+                                    CornerRadius="0"
                                     Padding="7,1"
                                     VerticalAlignment="Center">
                                 <TextBlock Text="{Binding Grade}"
@@ -98,7 +98,7 @@
                        FontSize="11"
                        TextWrapping="Wrap"
                        Margin="0,8,0,0"
-                       Foreground="#E0A030"
+                       Foreground="#D4A017"
                        IsVisible="{Binding HasWarning}"/>
         </Grid>
     </Border>

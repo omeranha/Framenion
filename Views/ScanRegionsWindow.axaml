@@ -27,7 +27,7 @@
                     <Border Background="{DynamicResource SurfaceBackgroundBrush}"
                             BorderBrush="{DynamicResource ControlBorderBrush}"
                             BorderThickness="1"
-                            CornerRadius="6"
+                            CornerRadius="0"
                             Padding="12"
                             Margin="0,0,0,10">
                         <Grid RowDefinitions="Auto,Auto,Auto">

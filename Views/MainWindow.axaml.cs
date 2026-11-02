@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using framenion.Src;
@@ -20,7 +21,7 @@ public partial class MainWindow : Window
 {
 	private readonly BulkObservableCollection<Item> displayedItems = [];
 	private readonly BulkObservableCollection<InventoryItem> displayedInventory = [];
-	private readonly BulkObservableCollection<Relic> displayedRelics = [];
+	private readonly BulkObservableCollection<RelicGroup> displayedRelics = [];
 	private readonly BulkObservableCollection<OwnedRiven> displayedRivens = [];
 	private readonly BulkObservableCollection<VoidFissure> displayedFissures = [];
 
@@ -33,6 +34,7 @@ public partial class MainWindow : Window
 	private string currentRivensFilter = "All";
 	private string currentFissureFilter = "Normal";
 	private bool hideUnownedRelics;
+	private bool isFissuresPanelOpen = true;
 
 	private string currentInventoryCategory = "All";
 	private string inventoryPrimeFilter = "All";
@@ -42,7 +44,7 @@ public partial class MainWindow : Window
 	private bool inventorySortDescending = true;
 
 	/// <summary>Sort orders offered on the relics tab.</summary>
-	public List<string> RelicSortOptions { get; } = ["Era", "Name", "Owned count", "Refinement"];
+	public List<string> RelicSortOptions { get; } = ["Era", "Name", "Owned count", "Best refinement"];
 
 	/// <summary>Sort orders offered on the rivens tab.</summary>
 	public List<string> RivenSortOptions { get; } = ["Grade", "Weapon", "Disposition", "Rolls", "Mastery rank"];
@@ -125,6 +127,7 @@ public partial class MainWindow : Window
 		Directory.CreateDirectory(AppData.CacheDir);
 		Directory.CreateDirectory(AppData.IconsCacheDir);
 		InitializeComponent();
+		this.UseDarkTitleBar();
 		if (Design.IsDesignMode) {
 			return;
 		}
@@ -189,7 +192,7 @@ public partial class MainWindow : Window
 		if (!AppData.IsShuttingDown) {
 			e.Cancel = true;
 			Hide();
-			ToastWindow.Show("Framenion", "Running in the system tray");
+			ToastWindow.Show("Framenion", "Running in the system tray", duration: TimeSpan.FromSeconds(1.5));
 			return;
 		}
 
@@ -235,15 +238,6 @@ public partial class MainWindow : Window
 				}
 				icons.Clear();
 			}
-		}
-	}
-
-	protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
-	{
-		base.OnPropertyChanged(change);
-		if (change.Property == WindowStateProperty && change.NewValue is WindowState newState && newState == WindowState.Minimized) {
-			Hide();
-			ToastWindow.Show("Framenion", "Application minimized to system tray");
 		}
 	}
 
@@ -594,7 +588,7 @@ public partial class MainWindow : Window
 
 	private void RefreshRelicsList()
 	{
-		IEnumerable<Relic> filtered = GameData.RelicList;
+		IEnumerable<RelicGroup> filtered = GameData.RelicGroups;
 		if (currentRelicsFilter != "All") {
 			filtered = filtered.Where(r => string.Equals(r.Era, currentRelicsFilter, StringComparison.OrdinalIgnoreCase));
 		}
@@ -610,14 +604,12 @@ public partial class MainWindow : Window
 				r.Rewards.Any(reward => reward.Name.Contains(query, StringComparison.OrdinalIgnoreCase)));
 		}
 
-		// GameData.RelicList is already in era order, so that case needs no re-sort.
+		// GameData.RelicGroups is already in era order, so that case needs no re-sort.
 		filtered = (RelicSortBox?.SelectedItem as string) switch {
-			"Name" => filtered.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
-				.ThenBy(r => GameData.GetRelicSortKey(r.Quality)),
+			"Name" => filtered.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase),
 			"Owned count" => filtered.OrderByDescending(r => r.OwnedCount)
-				.ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
-				.ThenBy(r => GameData.GetRelicSortKey(r.Quality)),
-			"Refinement" => filtered.OrderBy(r => GameData.GetRelicSortKey(r.Quality))
+				.ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase),
+			"Best refinement" => filtered.OrderByDescending(r => r.BestOwnedRefinement)
 				.ThenBy(r => VoidFissure.GetTierSortKey(r.Era))
 				.ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase),
 			_ => filtered,
@@ -629,7 +621,7 @@ public partial class MainWindow : Window
 	private void OnToggleUnownedRelicsClick(object? sender, RoutedEventArgs e)
 	{
 		hideUnownedRelics = HideUnownedRelicsButton.IsChecked ?? false;
-		ToolTip.SetTip(HideUnownedRelicsButton, hideUnownedRelics ? "Show relics you do not own" : "Hide relics you do not own");
+		ToolTip.SetTip(HideUnownedRelicsButton, hideUnownedRelics ? "Show Unowned" : "Hide Unowned");
 		RefreshRelicsList();
 	}
 
@@ -744,7 +736,7 @@ public partial class MainWindow : Window
 
 		var title = matches.Count == 1 ? "Fissure found" : $"{matches.Count} Fissures found";
 		var body = string.Join(Environment.NewLine, matches.Select(f => $"{(f.IsHard ? "Steel Path" : "Normal")} {f.MissionType} {f.Tier} ends in {f.TimeRemaining}"));
-		ToastWindow.Show(title, body, duration: TimeSpan.FromSeconds(8), icon: GameData.GetOrCreateBitmap("avares://framenion/assets/void_fissure.png"));
+		ToastWindow.Show(title, body, duration: TimeSpan.FromSeconds(4), icon: GameData.GetOrCreateBitmap("avares://framenion/assets/void_fissure.png"));
 	}
 
 	private async Task LoadNotifiedFissures()
@@ -872,10 +864,12 @@ public partial class MainWindow : Window
 	{
 		if (sender is not Button button) return;
 
-		FissureFilterNormalButton.Classes.Set("selected", false);
-		FissureFilterSteelPathButton.Classes.Set("selected", false);
-		button.Classes.Set("selected", true);
-		currentFissureFilter = button.Tag?.ToString() ?? "Normal";
+		bool toggleHard = currentFissureFilter == "Normal";
+		if (button.Content is Image image) {
+			image.Source = GameData.GetOrCreateBitmap(toggleHard ? "avares://framenion/assets/hard.png" : "avares://framenion/assets/normal.png");
+		}
+		ToolTip.SetTip(button, toggleHard ? "Steel Path" : "Normal");
+		currentFissureFilter = toggleHard ? "SteelPath" : "Normal";
 		await RefreshFissuresList();
 	}
 
@@ -887,6 +881,28 @@ public partial class MainWindow : Window
 		} catch (Exception ex) {
 			Log.Error("Manual fissure refresh failed.", ex);
 		}
+	}
+
+	/// <summary>
+	/// Collapses the Void Fissures panel to a slim strip holding just the toggle, so the
+	/// equipment/inventory grid can use the full width; expanding restores the title, filters
+	/// and list in one go.
+	/// </summary>
+	private void OnToggleFissuresDrawerClick(object? sender, RoutedEventArgs e)
+	{
+		isFissuresPanelOpen = !isFissuresPanelOpen;
+
+		FissuresTitleText.IsVisible = isFissuresPanelOpen;
+		FilterListButton.IsVisible = isFissuresPanelOpen;
+		RefreshFissuresButton.IsVisible = isFissuresPanelOpen;
+		FissuresListScrollViewer.IsVisible = isFissuresPanelOpen;
+		FissuresDifficultyButton.IsVisible = isFissuresPanelOpen;
+
+		ContentAreaGrid.ColumnDefinitions[1].Width = isFissuresPanelOpen ? new GridLength(300) : new GridLength(60);
+		FissuresDrawerIcon.Source = GameData.GetOrCreateBitmap(isFissuresPanelOpen
+			? "avares://framenion/assets/sidebar_close.png"
+			: "avares://framenion/assets/sidebar_open.png");
+		ToolTip.SetTip(FissuresDrawerButton, isFissuresPanelOpen ? "Hide Void Fissures panel" : "Show Void Fissures panel");
 	}
 
 	private async void OnRefreshInfoClickAsync(object? sender, RoutedEventArgs e)
@@ -956,4 +972,31 @@ public partial class MainWindow : Window
 	private void OnItemsZoomResetClick(object? sender, RoutedEventArgs e) => SetItemsZoom(1.0);
 
 	private void OnItemsZoomInClick(object? sender, RoutedEventArgs e) => SetItemsZoom(itemsZoom + ItemsZoomStep);
+
+	/// <summary>
+	/// Drives the zoom buttons from the keyboard everywhere except while a textbox has focus,
+	/// where these keys need to type instead. Buttons are not excluded: once any button is
+	/// clicked (a tab header, a filter chip, ...) it keeps focus indefinitely in this app, and
+	/// treating that as "typing" would silently disable the shortcut after the first click.
+	/// </summary>
+	protected override void OnKeyDown(KeyEventArgs e)
+	{
+		base.OnKeyDown(e);
+		if (e.Handled) return;
+		if (FocusManager?.GetFocusedElement() is TextBox) return;
+
+		bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+		bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+
+		if (e.Key == Key.Add || (e.Key == Key.OemPlus && shift && !ctrl)) {
+			SetItemsZoom(itemsZoom + ItemsZoomStep);
+			e.Handled = true;
+		} else if (e.Key == Key.Subtract || (e.Key == Key.OemMinus && !ctrl)) {
+			SetItemsZoom(itemsZoom - ItemsZoomStep);
+			e.Handled = true;
+		} else if ((e.Key == Key.OemPlus && (ctrl || !shift)) || (e.Key == Key.Add && ctrl)) {
+			SetItemsZoom(1.0);
+			e.Handled = true;
+		}
+	}
 }

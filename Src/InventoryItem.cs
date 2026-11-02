@@ -70,7 +70,6 @@ public sealed class InventoryItem
 
 	public double? DucatsPerPlatinum => Ducats > 0 && Platinum > 0 ? Ducats / Platinum : null;
 
-	/// <summary>What the whole stack is worth, which is what makes a row worth acting on.</summary>
 	public double TotalPlatinum => Platinum * OwnedCount;
 
 	public string DisplayName => Refinement.Length > 0 ? $"{Name} ({Refinement})" : Name;
@@ -89,7 +88,6 @@ public sealed class InventoryItem
 
 	public string VolumeText => Volume > 0 ? Volume.ToString("N0", CultureInfo.InvariantCulture) : placeholder;
 
-	/// <summary>Greens the ratio once ducating beats selling, so the column can be skimmed.</summary>
 	public string RatioColor => DucatsPerPlatinum switch {
 		>= goodRatio => "#3ABA29",
 		>= fairRatio => "#FFD700",
@@ -110,10 +108,6 @@ public sealed class InventoryItem
 		_ => $"No completed trades; this is the median asking price. {VolumeText} traded today.",
 	};
 
-	/// <summary>
-	/// The tile only has room for the headline numbers, so the rest of what the row knows is on
-	/// hover: where the price came from and what the whole stack is worth.
-	/// </summary>
 	public string DetailsTooltip
 	{
 		get {

@@ -44,7 +44,6 @@ public static class GameData
 		["VoidT6"] = ("Omnia", "#FFFFFF")
 	};
 
-	// Relic refinement is stored as a metal tier in the uniqueName.
 	private static readonly (string Suffix, string Quality)[] relicQualities = [
 		("Bronze", "Intact"),
 		("Silver", "Exceptional"),
@@ -56,13 +55,15 @@ public static class GameData
 	public static List<Item> ItemsList { get; set; } = [];
 	public static List<Relic> RelicList { get; set; } = [];
 
+	/// <summary>One entry per relic, with its four refinements behind it. What the relics panel binds to.</summary>
+	public static List<RelicGroup> RelicGroups { get; set; } = [];
+
 	/// <summary>Owned stacks with their market and ducat value, read from the inventory dump.</summary>
 	public static List<InventoryItem> InventoryList { get; set; } = [];
 
 	/// <summary>Owned riven mods, read from the inventory dump rather than the export.</summary>
 	public static List<Riven.OwnedRiven> RivenList { get; set; } = [];
 
-	#region Raw export
 	public static FrozenDictionary<string, string> ExportManifest { get; set; } = FrozenDictionary<string, string>.Empty;
 	public static FrozenDictionary<string, RegionDTO> ExportRegions { get; set; } = FrozenDictionary<string, RegionDTO>.Empty;
 	public static FrozenDictionary<string, RecipeDTO> ExportRecipes { get; set; } = FrozenDictionary<string, RecipeDTO>.Empty;
@@ -75,9 +76,7 @@ public static class GameData
 
 	/// <summary>Riven stat pools, keyed by the randomized upgrade's uniqueName.</summary>
 	public static FrozenDictionary<string, Riven.RivenModType> RivenMods { get; set; } = FrozenDictionary<string, Riven.RivenModType>.Empty;
-	#endregion
 
-	#region Derived indexes
 	/// <summary>uniqueName to display name, icon and ducat value, across every catalogue file.</summary>
 	public static FrozenDictionary<string, CatalogEntry> Catalog { get; private set; } = FrozenDictionary<string, CatalogEntry>.Empty;
 
@@ -97,13 +96,7 @@ public static class GameData
 
 	/// <summary>The same market catalogue keyed by the game's uniqueName, for inventory lookups.</summary>
 	public static FrozenDictionary<string, MarketItem> WFMarketByGameRef { get; private set; } = FrozenDictionary<string, MarketItem>.Empty;
-	#endregion
 
-	#region Bitmaps
-	/// <summary>
-	/// Decodes an icon, caching the result. Accepts a filesystem path for downloaded icons or an
-	/// "avares://" URI for assets bundled into the executable.
-	/// </summary>
 	public static Bitmap? GetOrCreateBitmap(string localPath, int decodeWidth = 80)
 	{
 		if (string.IsNullOrEmpty(localPath)) return null;
@@ -198,7 +191,6 @@ public static class GameData
 		Log.Info($"Resolving {pending.Count} icon(s).");
 		await Parallel.ForEachAsync(pending, async (icon, _) => await DownloadIconAsync(icon));
 	}
-	#endregion
 
 	/// <summary>
 	/// Builds the lookup tables every other feature reads from. Must run after the export files
@@ -252,12 +244,6 @@ public static class GameData
 		Riven.RivenData.Invalidate();
 	}
 
-	/// <summary>
-	/// Resolves a relic reward's uniqueName to a display name. Rewards point either straight at
-	/// a catalogue entry or at a recipe, whose result supplies the name (the recipe's own
-	/// internal name does not match the card: "PolearmPrimeBlueprint" reads "Orthos Prime
-	/// Blueprint" in game).
-	/// </summary>
 	public static bool TryResolveReward(string rewardName, out CatalogEntry resolved)
 	{
 		resolved = default!;
@@ -305,19 +291,36 @@ public static class GameData
 		return builder.ToString().TrimEnd();
 	}
 
+	/// <summary>
+	/// For modular weapons/companions only one component actually earns Mastery (the Zaw's
+	/// Strike, the Kitgun's Chamber, the K-Drive's Deck, the MOA's and Hound's Model/Head); the
+	/// rest (grips, clips, legs, payloads, bodies, the pet's installed weapon, ...) are cosmetic
+	/// or stat-only and must not appear as separate masterable items.
+	/// </summary>
+	private static bool IsNonMasterableModularPart(string type)
+	{
+		if (type.Contains("ModularMelee", StringComparison.Ordinal)) return !type.Contains("/Tip/", StringComparison.Ordinal) && !type.Contains("/Tips/", StringComparison.Ordinal);
+		if (type.Contains("KitGun", StringComparison.Ordinal) || type.Contains("ModularPrimary", StringComparison.Ordinal) || type.Contains("ModularSecondary", StringComparison.Ordinal)) return !type.Contains("/Barrel/", StringComparison.Ordinal) && !type.Contains("/Barrels/", StringComparison.Ordinal);
+		if (type.Contains("/MoaPets/", StringComparison.Ordinal)) return !type.Contains("/MoaPetHead", StringComparison.Ordinal);
+		if (type.Contains("/ZanukaPets/", StringComparison.Ordinal)) return !type.Contains("/ZanukaPetPartHead", StringComparison.Ordinal);
+		if (type.Contains("/Hoverboard/", StringComparison.Ordinal)) return !type.EndsWith("Deck", StringComparison.Ordinal);
+		return false;
+	}
+
 	private static bool ShouldSkipWeapon(string type, ItemDTO weapon)
 	{
-		if (type.Contains("PvPVariant") || type.Contains("Doppelganger") || type.Contains("ANTIGEN") || type.Contains("MUTAGEN") || (type.Contains("OperatorAmplifiers") && !type.Contains("Barrel"))) return true;
+		if (type.Contains("PvPVariant", StringComparison.Ordinal) || type.Contains("Doppelganger", StringComparison.Ordinal) || type.Contains("Antigen", StringComparison.OrdinalIgnoreCase)
+		|| type.Contains("Mutagen", StringComparison.OrdinalIgnoreCase) || (type.Contains("OperatorAmplifiers", StringComparison.Ordinal) && !type.Contains("Barrel", StringComparison.Ordinal))
+		|| weapon.Category == "SpecialItems") return true;
+	
+		if (IsNonMasterableModularPart(type)) return true;
 		var partType = weapon.PartType;
 		if (partType == null) return false;
-		// moas, hounds, k-drives, zaw blades and amp prisms
 		return partType != "LWPT_MOA_HEAD" && partType != "LWPT_ZANUKA_HEAD" && partType != "LWPT_HB_DECK" && partType != "LWPT_BLADE" && partType != "LWPT_AMP_OCULUS";
 	}
 
-	private static bool ShouldSkipSentinel(string type, ItemDTO sentinel)
-		=> type.Contains("/Pets/", StringComparison.Ordinal) || sentinel.Category == "SpecialItems";
+	private static bool ShouldSkipSentinel(string type, ItemDTO sentinel) => type.Contains("/Pets/", StringComparison.Ordinal) || sentinel.Category == "SpecialItems";
 
-	/// <summary>Builds the equipment and relic lists, downloading any icons they need.</summary>
 	public static async Task BuildCatalogAsync()
 	{
 		string blueprintPath = "avares://framenion/assets/blueprint.png";
@@ -342,8 +345,6 @@ public static class GameData
 
 		var items = new List<Item>(equipment.Count);
 		foreach (var (type, item) in equipment) {
-			// Use the catalogue's cleaned name, not the raw DTO name, or the icon placeholders
-			// ("<ARCHWING> Odonata Prime") leak into the UI, the set names and the match pool.
 			string name = Catalog.TryGetValue(type, out var entry) ? entry.Name : CleanDisplayName(item.Name);
 			var category = ResolveCategory(type, item);
 			WFMarketData.TryGetValue($"{name} Set", out var marketData);
@@ -356,9 +357,6 @@ public static class GameData
 		foreach (var item in items) {
 			foreach (var ingredient in item.Ingredients) {
 				byIngredient.TryAdd(ingredient.Name, item);
-				// A relic drops a warframe component as its blueprint ("Chroma Prime Systems
-				// Blueprint"), while the recipe ingredient is the crafted component ("Chroma
-				// Prime Systems"). Index both spellings so the overlay resolves either.
 				if (!ingredient.Name.EndsWith(" Blueprint", StringComparison.OrdinalIgnoreCase)) {
 					byIngredient.TryAdd($"{ingredient.Name} Blueprint", item);
 				}
@@ -387,7 +385,15 @@ public static class GameData
 		});
 		RelicList = relics;
 
-		Log.Info($"Catalogue built: items={ItemsList.Count} relics={RelicList.Count} ingredientIndex={ItemsByIngredientName.Count}");
+		var relicGroups = new List<RelicGroup>();
+		foreach (var byName in relics.GroupBy(r => r.Name, StringComparer.OrdinalIgnoreCase)) {
+			var refinements = byName.ToList();
+			var primary = refinements[0];
+			relicGroups.Add(new RelicGroup(primary.Name, primary.Era, primary.IconPath, primary.Rewards, refinements));
+		}
+		RelicGroups = relicGroups;
+
+		Log.Info($"Catalogue built: items={ItemsList.Count} relics={RelicList.Count} relicGroups={RelicGroups.Count} ingredientIndex={ItemsByIngredientName.Count}");
 	}
 
 	private static string ResolveCategory(string type, ItemDTO item)

@@ -4,7 +4,7 @@
              xmlns:local="using:framenion"
              xmlns:src="using:framenion.Src"
              x:DataType="local:App"
-             RequestedThemeVariant="Default">
+             RequestedThemeVariant="Dark">
     <Application.DataContext>
         <local:App />
     </Application.DataContext>
@@ -26,31 +26,35 @@
     </Application.DataTemplates>
 
     <Application.Resources>
-        <SolidColorBrush x:Key="AppBackgroundBrush" Color="#1A1A1A"/>
-        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#2C2C2C"/>
-        <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#1E1E1E"/>
-        <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="#252525"/>
-        <SolidColorBrush x:Key="ToastBackgroundBrush" Color="#252525"/>
+        <SolidColorBrush x:Key="AppBackgroundBrush" Color="#000000"/>
+        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#141414"/>
+        <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="#0D0D0D"/>
+        <SolidColorBrush x:Key="SecondaryBackgroundBrush" Color="#1F1F1F"/>
+        <SolidColorBrush x:Key="ToastBackgroundBrush" Color="#1F1F1F"/>
+        <SolidColorBrush x:Key="DefaultBorderBrush" Color="#4A4A4A"/>
 
-        <SolidColorBrush x:Key="ControlBorderBrush" Color="#4A4A4A"/>
-        <SolidColorBrush x:Key="SeparatorBorderBrush" Color="#3A3A3A"/>
+        <SolidColorBrush x:Key="ControlBorderBrush" Color="#3A3A3A"/>
+        <SolidColorBrush x:Key="SeparatorBorderBrush" Color="#262626"/>
 
-        <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#2C2C2C"/>
+        <!-- Buttons are transparent pills with a white outline, never a filled surface. -->
+        <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="Transparent"/>
         <SolidColorBrush x:Key="ButtonForegroundBrush" Color="White"/>
-        <SolidColorBrush x:Key="ButtonHoverBackgroundBrush" Color="#3A3A3A"/>
-        <SolidColorBrush x:Key="ButtonHoverForegroundBrush" Color="#CCCCCC"/>
+        <SolidColorBrush x:Key="ButtonHoverBackgroundBrush" Color="#1F1F1F"/>
+        <SolidColorBrush x:Key="ButtonHoverForegroundBrush" Color="#E6E6E6"/>
 
-        <SolidColorBrush x:Key="AccentBrush" Color="#4A9EFF"/>
+        <!-- The system's only non-monochrome color. User-configurable; this is just the default. -->
+        <SolidColorBrush x:Key="AccentBrush" Color="#C3D9F3"/>
 
-        <!-- Riven mod cards are violet in game, so the rivens tab follows suit. -->
-        <SolidColorBrush x:Key="RivenPanelBackgroundBrush" Color="#2C2C2C"/> <!-- #2A2139 -->
-        <SolidColorBrush x:Key="RivenTileBackgroundBrush" Color="#241A33"/>
+        <!-- Riven mod cards are violet in game, so the rivens tab keeps that hue as a deliberate
+             semantic exception to the monochrome rule, the same way warning/success colors are. -->
+        <SolidColorBrush x:Key="RivenPanelBackgroundBrush" Color="#241A33"/>
+        <SolidColorBrush x:Key="RivenTileBackgroundBrush" Color="#1B1327"/>
         <SolidColorBrush x:Key="RivenTileBorderBrush" Color="#6E45A8"/>
-        <SolidColorBrush x:Key="RivenIconBackgroundBrush" Color="#1B1327"/>
+        <SolidColorBrush x:Key="RivenIconBackgroundBrush" Color="#120D1C"/>
 
         <SolidColorBrush x:Key="PrimaryForegroundBrush" Color="White"/>
-        <SolidColorBrush x:Key="SecondaryForegroundBrush" Color="#D0D0D0"/>
-        <Color x:Key="RewardWindowBackgroundColor">#CC1E1E1E</Color> <!-- 80% opacity -->
+        <SolidColorBrush x:Key="SecondaryForegroundBrush" Color="#999999"/>
+        <Color x:Key="RewardWindowBackgroundColor">#CC000000</Color> <!-- 80% opacity -->
         <SolidColorBrush x:Key="RewardWindowBackgroundBrush" Color="{DynamicResource RewardWindowBackgroundColor}" />
     </Application.Resources>
 
@@ -60,16 +64,20 @@
         <Style Selector="Button">
             <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ButtonForegroundBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
-            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryForegroundBrush}"/>
+            <Setter Property="CornerRadius" Value="0"/>
             <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,ui-monospace,monospace"/>
+            <Setter Property="TextElement.LetterSpacing" Value="0.6"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
 
         <Style Selector="Button:pointerover">
             <Setter Property="Background" Value="{DynamicResource ButtonHoverBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ButtonHoverForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="1,1,1,1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryForegroundBrush}"/>
         </Style>
 
         <Style Selector="Button.selected">
@@ -78,31 +86,70 @@
             <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
         </Style>
 
+        <Style Selector="Button.header">
+            <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ButtonForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,ui-monospace,monospace"/>
+            <Setter Property="TextElement.LetterSpacing" Value="0.6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.header.selected">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
         <Style Selector="Button.iconButton">
             <Setter Property="Width" Value="34"/>
             <Setter Property="Height" Value="34"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/>
         </Style>
         <Style Selector="Button.iconButton Image">
-            <Setter Property="Width" Value="16"/>
-            <Setter Property="Height" Value="16"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="Stretch" Value="Uniform"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
         <Style Selector="Button.chip">
             <Setter Property="Padding" Value="10,4"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="CornerRadius" Value="0"/>
         </Style>
 
         <Style Selector="TextBlock.chipLabel">
             <Setter Property="Foreground" Value="{DynamicResource SecondaryForegroundBrush}"/>
             <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,ui-monospace,monospace"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="0,0,2,0"/>
+        </Style>
+
+        <!-- Text inputs lose their full outline for a single bottom hairline, focus thickens it rather than changing color. -->
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}"/>
+        </Style>
+        <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryForegroundBrush}"/>
+        </Style>
+        <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryForegroundBrush}"/>
         </Style>
     </Application.Styles>
     <TrayIcon.Icons>

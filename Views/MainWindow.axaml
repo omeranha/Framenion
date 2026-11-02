@@ -18,51 +18,59 @@
             <Grid ColumnDefinitions="Auto, *, Auto, Auto, Auto">
                 <!-- Menu Buttons -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
-                    <Button Name="ItemsButton" Content="Equipment" Classes="selected" Click="OnItemsClick" Background="{DynamicResource SurfaceBackgroundBrush}" Padding="20,10"/>
-                    <Button Name="InventoryButton" Content="Inventory" Click="OnInventoryClick" Padding="20,10" Background="{DynamicResource SurfaceBackgroundBrush}"/>
-                    <Button Name="RelicsButton" Content="Relics" Click="OnRelicsClick" Padding="20,10" Background="{DynamicResource SurfaceBackgroundBrush}"/>
-                    <Button Name="RivensButton" Content="Rivens" Click="OnRivensClick" Padding="20,10" Background="{DynamicResource SurfaceBackgroundBrush}"/>
+                    <Button Name="ItemsButton" Classes="header selected" Content="EQUIPMENT" Click="OnItemsClick" Padding="20,10"/>
+                    <Button Name="InventoryButton" Classes="header" Content="INVENTORY" Click="OnInventoryClick" Padding="20,10"/>
+                    <Button Name="RelicsButton" Classes="header" Content="RELICS" Click="OnRelicsClick" Padding="20,10"/>
+                    <Button Name="RivensButton" Classes="header" Content="RIVENS" Click="OnRivensClick" Padding="20,10"/>
                 </StackPanel>
 
                 <!-- Player Info Panel -->
                 <ProgressBar Grid.Column="2" MinWidth="100" Name="LoadingBar" IsIndeterminate="true" IsVisible="{Binding #RootWindow.IsLoading}" ToolTip.Tip="Initializing..."
              Height="10" VerticalAlignment="Center" HorizontalAlignment="Right" Foreground="Green" Margin="0, 0, 10, 0"/>
                 <Image Grid.Column="3" Name="WarframeOpened" HorizontalAlignment="Right" Width="32" Height="32" VerticalAlignment="Center" ToolTip.Tip="Warframe is closed" Source="avares://framenion/assets/uncheck_d.png" Margin="0, 0, 10, 0"/>
-                <Border Grid.Column="4" Background="{DynamicResource SurfaceBackgroundBrush}" CornerRadius="5" Padding="15,5" HorizontalAlignment="Right">
+                <Border Grid.Column="4" Background="{DynamicResource SurfaceBackgroundBrush}" CornerRadius="0" Padding="15,5" HorizontalAlignment="Right">
                     <StackPanel Orientation="Horizontal" Spacing="15">
                         <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Button Name="RefreshInfoButton" Content="↻" Click="OnRefreshInfoClickAsync" Classes="iconButton" ToolTip.Tip="Refresh Inventory Info"/>
+                            <Button Name="RefreshInfoButton" Click="OnRefreshInfoClickAsync" Classes="iconButton" ToolTip.Tip="Refresh Inventory Info">
+                                <Image Source="avares://framenion/assets/reset.png" RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                            </Button>
 
-                            <Image Name="PlayerIcon" Width="32" Height="32" VerticalAlignment="Center"/>
-                            <Image Name="MasteryIcon" Width="32" Height="32" VerticalAlignment="Center"/>
+                            <Image Name="PlayerIcon" Width="32" Height="32" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                            <Image Name="MasteryIcon" Width="32" Height="32" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
 
                             <TextBlock Name="MasteryText" VerticalAlignment="Center" FontWeight="Bold" Foreground="{DynamicResource PrimaryForegroundBrush}"/>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Image Source="avares://framenion/assets/credits.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                            <Image Source="avares://framenion/assets/credits.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                             <TextBlock Name="CreditsText" Text="" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryForegroundBrush}"/>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Image Source="avares://framenion/assets/platinum.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                            <Image Source="avares://framenion/assets/platinum.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                             <TextBlock Name="PlatinumText" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryForegroundBrush}"/>
                         </StackPanel>
 
-                        <Button Content="⚙" Click="OnOpenSettingsClick" Classes="iconButton" ToolTip.Tip="Settings"/>
+                        <Button Click="OnOpenSettingsClick" Classes="iconButton" ToolTip.Tip="Settings">
+                            <Image Source="avares://framenion/assets/gear.png" RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                        </Button>
                     </StackPanel>
                 </Border>
             </Grid>
         </Border>
 
         <!-- Content Area: Left = tabs, Right = Void Fissures panel -->
-        <Grid Grid.Row="1" Background="{DynamicResource AppBackgroundBrush}" ColumnDefinitions="*,300">
+        <Grid Grid.Row="1" Name="ContentAreaGrid" Background="{DynamicResource AppBackgroundBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="300"/>
+            </Grid.ColumnDefinitions>
 
             <!-- ─── LEFT: Tab Content ─── -->
             <Grid Grid.Column="0">
                 <!-- Items Content -->
                 <Border Name="ItemsContent" IsVisible="True" Padding="20">
-                    <Grid RowDefinitions="Auto,Auto,*">
+                    <Grid RowDefinitions="Auto,Auto,*,Auto">
                         <Grid Grid.Row="0" ColumnDefinitions="*,40,40,40,200" Margin="0,0,0,20">
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <Button Name="FilterAllButton" Click="OnFilterClick"
@@ -78,7 +86,7 @@
                                         Tag="Warframes"
                                         Padding="8,8"
                                         ToolTip.Tip="Warframe">
-                                    <Image Source="avares://framenion/assets/warframes.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                    <Image Source="avares://framenion/assets/warframes.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
 
                                 <Button Name="FilterPrimaryButton"
@@ -86,7 +94,7 @@
                                         Tag="Primary"
                                         Padding="8,8"
                                         ToolTip.Tip="Primary">
-                                    <Image Source="avares://framenion/assets/primary.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                    <Image Source="avares://framenion/assets/primary.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
 
                                 <Button Name="FilterSecondaryButton"
@@ -94,7 +102,7 @@
                                         Tag="Secondary"
                                         Padding="8,8"
                                         ToolTip.Tip="Secondary">
-                                    <Image Source="avares://framenion/assets/pistols.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                    <Image Source="avares://framenion/assets/pistols.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
 
                                 <Button Name="FilterMeleeButton"
@@ -102,7 +110,7 @@
                                         Tag="Melee"
                                         Padding="8,8"
                                         ToolTip.Tip="Melee">
-                                    <Image Source="avares://framenion/assets/melee.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                    <Image Source="avares://framenion/assets/melee.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
 
                                 <Button Name="FilterArchgunsButton"
@@ -110,7 +118,7 @@
                                         Tag="Archguns"
                                         Padding="8,8"
                                         ToolTip.Tip="Archgun">
-                                    <Image Source="avares://framenion/assets/archguns.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                    <Image Source="avares://framenion/assets/archguns.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
 
                                 <Button Name="FilterArchmeleeButton"
@@ -118,7 +126,7 @@
                                         Tag="Archmelee"
                                         Padding="8,8"
                                         ToolTip.Tip="Archmelee">
-                                    <Image Source="avares://framenion/assets/archmelees.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                    <Image Source="avares://framenion/assets/archmelees.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
 
                                 <Button Name="FilterCompanionsButton"
@@ -126,7 +134,7 @@
                                         Tag="Companions"
                                         Padding="8,8"
                                         ToolTip.Tip="Companion">
-                                    <Image Source="avares://framenion/assets/sentinels.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                    <Image Source="avares://framenion/assets/sentinels.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
 
                                 <Button Name="FilterVehiclesButton"
@@ -134,7 +142,7 @@
                                         Tag="Vehicles"
                                         Padding="8,8"
                                         ToolTip.Tip="Vehicle">
-                                    <Image Source="avares://framenion/assets/archwings.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                    <Image Source="avares://framenion/assets/archwings.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
 
                                 <Button Name="FilterAmpsButton"
@@ -142,53 +150,20 @@
                                         Tag="Amps"
                                         Padding="8,8"
                                         ToolTip.Tip="Amp">
-                                    <Image Source="avares://framenion/assets/amps.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                    <Image Source="avares://framenion/assets/amps.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
                             </StackPanel>
-
-                            <Button Grid.Column="1"
-                Content="−"
-                Click="OnItemsZoomOutClick"
-                Classes="iconButton"
-                ToolTip.Tip="Zoom out"
-                Padding="10,6"/>
-
-        <Button Grid.Column="2"
-                Content="%"
-                Click="OnItemsZoomResetClick"
-                Classes="iconButton"
-                ToolTip.Tip="Reset zoom"
-                Padding="10,6"/>
-
-        <Button Grid.Column="3"
-                Content="+"
-                Click="OnItemsZoomInClick"
-                Classes="iconButton"
-                ToolTip.Tip="Zoom in"
-                Padding="10,6"/>
 
                             <TextBox Grid.Column="4"
                                      Name="ItemsSearchBox"
                                      PlaceholderText="Search items"
                                      VerticalAlignment="Center"
                                      Padding="8,8"
-                                     TextChanged="OnSearchTextChanged"
-                                     Background="{DynamicResource PanelBackgroundBrush}"
-                                     Foreground="{DynamicResource PrimaryForegroundBrush}"
-                                     BorderBrush="{DynamicResource ControlBorderBrush}"
-                                     BorderThickness="1"
-                                     CornerRadius="4"/>
+                                     TextChanged="OnSearchTextChanged"/>
                         </Grid>
 
-                        <Border Grid.Row="2"
-                                Background="{DynamicResource PanelBackgroundBrush}"
-                                CornerRadius="8"
-                                BorderBrush="{DynamicResource ControlBorderBrush}"
-                                BorderThickness="1">
-
-                            <ScrollViewer Name="ItemsScrollViewer"
-                                          HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto">
+                        <Border Grid.Row="2" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="0" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
+                            <ScrollViewer Name="ItemsScrollViewer" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                                 <ItemsRepeater Name="ItemsList">
                                     <ItemsRepeater.Layout>
                                         <WrapLayout Orientation="Horizontal"/>
@@ -197,7 +172,7 @@
                                     <ItemsRepeater.ItemTemplate>
                                         <DataTemplate x:DataType="src:Item">
                                             <Border Background="{DynamicResource SurfaceBackgroundBrush}"
-                                                    CornerRadius="6"
+                                                    CornerRadius="0"
                                                     Margin="8"
                                                     Padding="12"
                                                     Width="{Binding #RootWindow.ItemsTileWidth}"
@@ -206,33 +181,35 @@
                                                     BorderThickness="2">
 
                                                 <Grid RowDefinitions="Auto,Auto,Auto,*">
+                                                     <StackPanel Grid.Row="0" Grid.Column="0"  HorizontalAlignment="Left" VerticalAlignment="Top" IsVisible="{Binding IsPriceVisible}">
+                                                        <Image Source="avares://framenion/assets/platinum.png" Stretch="Uniform" Width="32" Height="32" VerticalAlignment="Center" RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                                                        <TextBlock Text="{Binding Price}" Foreground="{DynamicResource PrimaryForegroundBrush}" FontWeight="Bold" FontSize="12" TextAlignment="Center" VerticalAlignment="Center"/>
+                                                     </StackPanel>
+                                                     
                                                     <!-- Main Icon -->
-                                                    <Border Grid.Row="0"
+                                                    <Border Grid.Row="0" Grid.Column="1"
                                                             Width="{Binding #RootWindow.ItemsIconSize}"
                                                             Height="{Binding #RootWindow.ItemsIconSize}"
                                                             HorizontalAlignment="Center"
                                                             Background="{DynamicResource AppBackgroundBrush}"
-                                                            CornerRadius="4"
+                                                            CornerRadius="0"
                                                             Margin="0,0,0,8"
                                                             BorderBrush="{DynamicResource ControlBorderBrush}"
                                                             BorderThickness="1">
-                                                        <Image Source="{Binding Icon}" Stretch="Uniform"/>
+                                                        <Image Source="{Binding Icon}" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                                     </Border>
 
-                                                    <StackPanel Grid.Row="0" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Top" IsVisible="{Binding IsPriceVisible}">
-														<Image Source="avares://framenion/assets/platinum.png"
+                                                    <StackPanel Grid.Row="0" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Top">
+                                                        <Image Name="mastery_icon"
+                                                               Source="avares://framenion/assets/mastered.png"
                                                                Stretch="Uniform"
-                                                               Width="20" Height="20"
-                                                               VerticalAlignment="Center"/>
-                                                        <TextBlock Text="{Binding Price}"
-                                                                   Foreground="{DynamicResource PrimaryForegroundBrush}"
-                                                                   FontWeight="Bold"
-                                                                   FontSize="13"
-                                                                   TextAlignment="Center"
-                                                                   VerticalAlignment="Center"/>
+                                                               Width="32" Height="32"
+                                                               IsVisible="{Binding Mastered}"
+                                                               VerticalAlignment="Center"
+                                                               RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                                     </StackPanel>
 
-                                                    <!-- Name + Mastery -->
+                                                    <!-- Name -->
                                                     <StackPanel Grid.Row="1"
                                                                 Orientation="Horizontal"
                                                                 Spacing="6"
@@ -245,13 +222,6 @@
                                                                    TextWrapping="Wrap"
                                                                    TextAlignment="Center"
                                                                    VerticalAlignment="Center"/>
-
-                                                        <Image Name="mastery_icon"
-                                                               Source="avares://framenion/assets/mastered.png"
-                                                               Stretch="Uniform"
-                                                               Width="20" Height="20"
-                                                               IsVisible="{Binding Mastered}"
-                                                               VerticalAlignment="Center"/>
                                                     </StackPanel>
 
                                                     <!-- Ingredients -->
@@ -269,7 +239,7 @@
                                                                         HorizontalAlignment="Center"
                                                                         VerticalAlignment="Center"
                                                                         Background="{Binding BackgroundColor}"
-                                                                        CornerRadius="4"
+                                                                        CornerRadius="0"
                                                                         Margin="4"
                                                                         BorderBrush="{Binding BorderColor}"
                                                                         BorderThickness="1">
@@ -286,7 +256,8 @@
                                                                                Width="40" Height="40"
                                                                                HorizontalAlignment="Center"
                                                                                VerticalAlignment="Center"
-                                                                               ToolTip.Tip="{Binding}"/>
+                                                                               ToolTip.Tip="{Binding}"
+                                                                               RenderOptions.BitmapInterpolationMode="HighQuality"/>
 
                                                                         <TextBlock Text="{Binding OwnedCount}"
                                                                                    Foreground="{DynamicResource PrimaryForegroundBrush}"
@@ -309,6 +280,29 @@
                                 </ItemsRepeater>
                             </ScrollViewer>
                         </Border>
+
+                        <!-- Legend: explains the tile/ingredient border colors used above -->
+                        <Border Grid.Row="3"
+                                Background="{DynamicResource PanelBackgroundBrush}"
+                                BorderBrush="{DynamicResource SeparatorBorderBrush}"
+                                BorderThickness="1"
+                                Padding="12,8"
+                                Margin="0,12,0,0">
+                            <WrapPanel Orientation="Horizontal" ItemSpacing="20" LineSpacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Width="10" Height="10" Background="#3ABA29" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1"/>
+                                    <TextBlock Text="OWNED" Classes="chipLabel"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Width="10" Height="10" Background="#4A9EFF" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1"/>
+                                    <TextBlock Text="CRAFTABLE" Classes="chipLabel"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Width="10" Height="10" Background="#FFD700" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1"/>
+                                    <TextBlock Text="DROPS FROM OWNED RELIC" Classes="chipLabel"/>
+                                </StackPanel>
+                            </WrapPanel>
+                        </Border>
                     </Grid>
                 </Border>
             </Grid>
@@ -319,12 +313,12 @@
                     <Grid RowDefinitions="Auto,Auto,Auto,*">
                         <Grid Grid.Row="0" ColumnDefinitions="Auto,*,40,40,40,200" Margin="0,0,0,10">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button Name="FilterInvAllButton" Content="All" Click="OnInventoryCategoryClick" Tag="All" Classes="selected" Padding="12,6"/>
-                                <Button Name="FilterInvPartsButton" Content="Parts" Click="OnInventoryCategoryClick" Tag="Component" Padding="12,6" ToolTip.Tip="Chassis, neuroptics, systems, barrels, links and the rest"/>
-                                <Button Name="FilterInvBlueprintsButton" Content="Blueprints" Click="OnInventoryCategoryClick" Tag="Blueprint" Padding="12,6"/>
-                                <Button Name="FilterInvRelicsButton" Content="Relics" Click="OnInventoryCategoryClick" Tag="Relic" Padding="12,6"/>
-                                <Button Name="FilterInvModsButton" Content="Mods" Click="OnInventoryCategoryClick" Tag="Mod" Padding="12,6"/>
-                                <Button Name="FilterInvArcanesButton" Content="Arcanes" Click="OnInventoryCategoryClick" Tag="Arcane" Padding="12,6"/>
+                                <Button Name="FilterInvAllButton" Content="ALL" Click="OnInventoryCategoryClick" Tag="All" Classes="selected" Padding="12,6"/>
+                                <Button Name="FilterInvPartsButton" Content="PARTS" Click="OnInventoryCategoryClick" Tag="Component" Padding="12,6" ToolTip.Tip="Chassis, neuroptics, systems, barrels, links and the rest"/>
+                                <Button Name="FilterInvBlueprintsButton" Content="BLUEPRINTS" Click="OnInventoryCategoryClick" Tag="Blueprint" Padding="12,6"/>
+                                <Button Name="FilterInvRelicsButton" Content="RELICS" Click="OnInventoryCategoryClick" Tag="Relic" Padding="12,6"/>
+                                <Button Name="FilterInvModsButton" Content="MODS" Click="OnInventoryCategoryClick" Tag="Mod" Padding="12,6"/>
+                                <Button Name="FilterInvArcanesButton" Content="ARCANES" Click="OnInventoryCategoryClick" Tag="Arcane" Padding="12,6"/>
                             </StackPanel>
 
                             <Button Grid.Column="2" Content="−" Click="OnItemsZoomOutClick" Classes="iconButton" ToolTip.Tip="Zoom out" Padding="10,6"/>
@@ -336,54 +330,44 @@
                                      PlaceholderText="Search inventory"
                                      Padding="8,8"
                                      TextChanged="OnSearchInventoryTextChanged"
-                                     VerticalAlignment="Center"
-                                     Background="{DynamicResource PanelBackgroundBrush}"
-                                     Foreground="{DynamicResource PrimaryForegroundBrush}"
-                                     BorderBrush="{DynamicResource ControlBorderBrush}"
-                                     BorderThickness="1"
-                                     CornerRadius="4"/>
+                                     VerticalAlignment="Center"/>
                         </Grid>
 
                         <!-- Narrowing filters. Clicking an active chip clears it, so each group
                              is a tri-state without needing an explicit "any" chip. -->
                         <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,16" ItemSpacing="16" LineSpacing="8">
                             <StackPanel Orientation="Horizontal" Spacing="4">
-                                <TextBlock Text="Prime" Classes="chipLabel"/>
-                                <Button Name="InvPrimeNormalButton" Content="Normal" Tag="Normal" Click="OnInventoryPrimeClick" Classes="chip"/>
-                                <Button Name="InvPrimePrimeButton" Content="Prime" Tag="Prime" Click="OnInventoryPrimeClick" Classes="chip"/>
+                                <TextBlock Text="PRIME" Classes="chipLabel"/>
+                                <Button Name="InvPrimeNormalButton" Content="NORMAL" Tag="Normal" Click="OnInventoryPrimeClick" Classes="chip"/>
+                                <Button Name="InvPrimePrimeButton" Content="PRIME" Tag="Prime" Click="OnInventoryPrimeClick" Classes="chip"/>
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="Whether the equipment this part builds is already mastered. Relics, mods and arcanes build nothing, so they drop out while this is set.">
-                                <TextBlock Text="Mastered" Classes="chipLabel"/>
-                                <Button Name="InvMasteredYesButton" Content="Yes" Tag="Yes" Click="OnInventoryMasteredClick" Classes="chip"/>
-                                <Button Name="InvMasteredNoButton" Content="No" Tag="No" Click="OnInventoryMasteredClick" Classes="chip"/>
+                                <TextBlock Text="MASTERED" Classes="chipLabel"/>
+                                <Button Name="InvMasteredYesButton" Content="YES" Tag="Yes" Click="OnInventoryMasteredClick" Classes="chip"/>
+                                <Button Name="InvMasteredNoButton" Content="NO" Tag="No" Click="OnInventoryMasteredClick" Classes="chip"/>
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="Keep only stacks you own more than one of">
-                                <TextBlock Text="Amount" Classes="chipLabel"/>
-                                <Button Name="InvAmountAnyButton" Content="Any" Tag="0" Click="OnInventoryAmountClick" Classes="chip selected"/>
+                                <TextBlock Text="AMOUNT" Classes="chipLabel"/>
+                                <Button Name="InvAmountAnyButton" Content="ANY" Tag="0" Click="OnInventoryAmountClick" Classes="chip selected"/>
                                 <Button Name="InvAmountManyButton" Content="&gt;1" Tag="2" Click="OnInventoryAmountClick" Classes="chip"/>
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Spacing="4">
-                                <TextBlock Text="Min plat" Classes="chipLabel"/>
+                                <TextBlock Text="MIN PLAT" Classes="chipLabel"/>
                                 <TextBox Name="InventoryMinPlatinumBox"
                                          PlaceholderText="Any"
                                          Width="64"
                                          Padding="6,4"
                                          FontSize="12"
                                          TextChanged="OnInventoryMinPlatinumChanged"
-                                         VerticalAlignment="Center"
-                                         Background="{DynamicResource PanelBackgroundBrush}"
-                                         Foreground="{DynamicResource PrimaryForegroundBrush}"
-                                         BorderBrush="{DynamicResource ControlBorderBrush}"
-                                         BorderThickness="1"
-                                         CornerRadius="4"/>
-                                <TextBlock Text="p" Classes="chipLabel"/>
+                                         VerticalAlignment="Center"/>
+                                <TextBlock Text="P" Classes="chipLabel"/>
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Spacing="4">
-                                <TextBlock Text="Sort" Classes="chipLabel"/>
+                                <TextBlock Text="SORT" Classes="chipLabel"/>
                                 <ComboBox Name="InventorySortBox"
                                           ItemsSource="{Binding #RootWindow.InventorySortOptions}"
                                           SelectedIndex="0"
@@ -404,7 +388,7 @@
                              toolbar so a long total cannot squeeze the controls. -->
                         <Border Grid.Row="2"
                                 Background="{DynamicResource SurfaceBackgroundBrush}"
-                                CornerRadius="6"
+                                CornerRadius="0"
                                 BorderBrush="{DynamicResource ControlBorderBrush}"
                                 BorderThickness="1"
                                 Padding="12,7"
@@ -417,7 +401,7 @@
 
                         <Border Grid.Row="3"
                                 Background="{DynamicResource PanelBackgroundBrush}"
-                                CornerRadius="8"
+                                CornerRadius="0"
                                 BorderBrush="{DynamicResource ControlBorderBrush}"
                                 BorderThickness="1">
 
@@ -432,7 +416,7 @@
                                     <ItemsRepeater.ItemTemplate>
                                         <DataTemplate x:DataType="src:InventoryItem">
                                             <Border Background="{DynamicResource SurfaceBackgroundBrush}"
-                                                    CornerRadius="6"
+                                                    CornerRadius="0"
                                                     Margin="8"
                                                     Padding="12"
                                                     Width="{Binding #RootWindow.ItemsTileWidth}"
@@ -461,7 +445,7 @@
                                                                 Height="{Binding #RootWindow.ItemsIconSize}"
                                                                 HorizontalAlignment="Center"
                                                                 Background="{DynamicResource AppBackgroundBrush}"
-                                                                CornerRadius="4"
+                                                                CornerRadius="0"
                                                                 Margin="0,0,0,8"
                                                                 BorderBrush="{DynamicResource ControlBorderBrush}"
                                                                 BorderThickness="1">
@@ -470,7 +454,7 @@
 
                                                         <Border Grid.Column="2"
                                                                 Background="{Binding RatioColor}"
-                                                                CornerRadius="4"
+                                                                CornerRadius="0"
                                                                 Padding="6,2"
                                                                 VerticalAlignment="Top"
                                                                 IsVisible="{Binding HasRatio}"
@@ -553,111 +537,49 @@
 
             <Grid Grid.Column="0">
                 <!-- Relics Content -->
-                <Border Name="RelicsContent" IsVisible="False" Padding="20">                    <Grid RowDefinitions="Auto,Auto,*">
-                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,40,40,40,200" Margin="0,0,0,20">
+                <Border Name="RelicsContent" IsVisible="False" Padding="20">
+                    <Grid RowDefinitions="Auto,Auto,*">
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,20">
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Name="FilterAllRelicsButton" Click="OnFilterRelicClick"
-                                        Tag="All"
-                                        Classes="selected"
-                                        Padding="8,8"
-                                        ToolTip.Tip="All">
-                                    <Image Source="avares://framenion/assets/all.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                <Button Name="FilterAllRelicsButton" Click="OnFilterRelicClick" Tag="All" Classes="selected" Padding="8,8" ToolTip.Tip="All">
+                                    <Image Source="avares://framenion/assets/all.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality" />
                                 </Button>
-
-                                <Button Name="FilterLithButton"
-                                        Click="OnFilterRelicClick"
-                                        Tag="Lith"
-                                        Padding="8,8"
-                                        ToolTip.Tip="Lith">
-                                    <Image Source="avares://framenion/assets/lith.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                <Button Name="FilterLithButton" Click="OnFilterRelicClick" Tag="Lith" Padding="8,8" ToolTip.Tip="Lith">
+                                    <Image Source="avares://framenion/assets/lith.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
-                                <Button Name="FilterMesoButton"
-                                        Click="OnFilterRelicClick"
-                                        Tag="Meso"
-                                        Padding="8,8"
-                                        ToolTip.Tip="Meso">
-                                    <Image Source="avares://framenion/assets/meso.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                <Button Name="FilterMesoButton" Click="OnFilterRelicClick" Tag="Meso" Padding="8,8" ToolTip.Tip="Meso">
+                                    <Image Source="avares://framenion/assets/meso.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
-                                <Button Name="FilterNeoButton"
-                                        Click="OnFilterRelicClick"
-                                        Tag="Neo"
-                                        Padding="8,8"
-                                        ToolTip.Tip="Neo">
-                                    <Image Source="avares://framenion/assets/neo.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                <Button Name="FilterNeoButton" Click="OnFilterRelicClick" Tag="Neo" Padding="8,8" ToolTip.Tip="Neo">
+                                    <Image Source="avares://framenion/assets/neo.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
-                                <Button Name="FilterAxiButton"
-                                        Click="OnFilterRelicClick"
-                                        Tag="Axi"
-                                        Padding="8,8"
-                                        ToolTip.Tip="Axi">
-                                    <Image Source="avares://framenion/assets/axi.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                <Button Name="FilterAxiButton" Click="OnFilterRelicClick" Tag="Axi" Padding="8,8" ToolTip.Tip="Axi">
+                                    <Image Source="avares://framenion/assets/axi.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
-                                <Button Name="FilterRequiemButton"
-                                        Click="OnFilterRelicClick"
-                                        Tag="Requiem"
-                                        Padding="8,8"
-                                        ToolTip.Tip="Requiem">
-                                    <Image Source="avares://framenion/assets/requiem.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                                <Button Name="FilterRequiemButton" Click="OnFilterRelicClick" Tag="Requiem" Padding="8,8" ToolTip.Tip="Requiem">
+                                    <Image Source="avares://framenion/assets/requiem.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Button>
                             </StackPanel>
 
-                        <ToggleButton Grid.Column="1"
-                                      Name="HideUnownedRelicsButton"
-                                      Click="OnToggleUnownedRelicsClick"
-                                      Padding="8,8"
-                                      Margin="0,0,8,0"
-                                      VerticalAlignment="Center"
-                                      ToolTip.Tip="Hide relics you do not own">
-                            <Image Source="avares://framenion/assets/eye.png" Width="24" Height="24" VerticalAlignment="Center"/>
+                        <ToggleButton Grid.Column="1" Name="HideUnownedRelicsButton" Click="OnToggleUnownedRelicsClick" Padding="8,8" Margin="0,0,8,0" VerticalAlignment="Center" ToolTip.Tip="Hide Unowned" BorderThickness="0" HorizontalAlignment="Right">
+                            <ToggleButton.Styles>
+                                <Style Selector="ToggleButton:checked /template/ ContentPresenter#PART_ContentPresenter">
+                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                </Style>
+                                <Style Selector="ToggleButton:unchecked /template/ ContentPresenter#PART_ContentPresenter">
+                                    <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}"/>
+                                </Style>
+                            </ToggleButton.Styles>
+                            <Image Source="avares://framenion/assets/eye.png" Width="24" Height="24" VerticalAlignment="Center" Stretch="Uniform" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                         </ToggleButton>
 
-                        <ComboBox Grid.Column="2"
-                                  Name="RelicSortBox"
-                                  ItemsSource="{Binding #RootWindow.RelicSortOptions}"
-                                  SelectedIndex="0"
-                                  SelectionChanged="OnRelicSortChanged"
-                                  MinWidth="150"
-                                  Margin="0,0,8,0"
-                                  VerticalAlignment="Center"
-                                  ToolTip.Tip="Sort relics"/>
-
-                        <Button Grid.Column="3"
-                Content="−"
-                Click="OnItemsZoomOutClick"
-                Classes="iconButton"
-                ToolTip.Tip="Zoom out"
-                Padding="10,6"/>
-
-        <Button Grid.Column="4"
-                Content="%"
-                Click="OnItemsZoomResetClick"
-                Classes="iconButton"
-                ToolTip.Tip="Reset zoom"
-                Padding="10,6"/>
-
-        <Button Grid.Column="5"
-                Content="+"
-                Click="OnItemsZoomInClick"
-                Classes="iconButton"
-                ToolTip.Tip="Zoom in"
-                Padding="10,6"/>
-
-                            <TextBox Grid.Column="6"
-                                     Name="RelicsSearchBox"
-                                     PlaceholderText="Search relics or rewards"
-                                     Padding="8,8"
-                                     TextChanged="OnSearchRelicsTextChanged"
-                                     VerticalAlignment="Center"
-                                     Background="{DynamicResource PanelBackgroundBrush}"
-                                     Foreground="{DynamicResource PrimaryForegroundBrush}"
-                                     BorderBrush="{DynamicResource ControlBorderBrush}"
-                                     BorderThickness="1"
-                                     CornerRadius="4"/>
-                        </Grid>
+                        <ComboBox Grid.Column="2" Name="RelicSortBox" ItemsSource="{Binding #RootWindow.RelicSortOptions}" SelectedIndex="0" SelectionChanged="OnRelicSortChanged" MinWidth="150" Margin="0,0,8,0" VerticalAlignment="Center" ToolTip.Tip="Sort relics" HorizontalAlignment="Right"/>
+                        <TextBox Grid.Column="3" Name="RelicsSearchBox" PlaceholderText="Search relics or rewards" Padding="8,8" TextChanged="OnSearchRelicsTextChanged" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                    </Grid>
 
                         <Border Grid.Row="2"
                                 Background="{DynamicResource PanelBackgroundBrush}"
-                                CornerRadius="8"
+                                CornerRadius="0"
                                 BorderBrush="{DynamicResource ControlBorderBrush}"
                                 BorderThickness="1">
 
@@ -670,49 +592,37 @@
                                     </ItemsRepeater.Layout>
 
                                     <ItemsRepeater.ItemTemplate>
-                                        <DataTemplate x:DataType="src:Relic">
+                                        <DataTemplate x:DataType="src:RelicGroup">
                                             <Border Background="{DynamicResource SurfaceBackgroundBrush}"
-                                                    CornerRadius="6"
+                                                    CornerRadius="0"
                                                     Margin="8"
                                                     Padding="12"
                                                     Width="{Binding #RootWindow.ItemsTileWidth}"
                                                     MinHeight="{Binding #RootWindow.ItemsTileMinHeight}"
-                                                    BorderThickness="2">
+                                                    BorderBrush="{DynamicResource DefaultBorderBrush}"
+                                                    BorderThickness="2"
+                                                    ToolTip.Tip="{Binding DetailsTooltip}">
 
                                                 <Grid RowDefinitions="Auto,Auto,Auto,*">
-                                                    <!-- Main Icon -->
-                                                    <Grid ColumnDefinitions="Auto,*">
-                                                        <TextBlock Grid.Column="0" IsVisible="{Binding IsCountVisible}">
-                                                            <Run Text="x"/><Run Text="{Binding OwnedCount}"/>
-                                                        </TextBlock>
-                                                        <Image Grid.Column="0" IsVisible="{Binding Unowned}"
-                                                               Width="24" Height="24"
-                                                               HorizontalAlignment="Left"
-                                                               VerticalAlignment="Top"
-                                                               Source="avares://framenion/assets/eye.png">
-                                                        </Image>
-                                                        <Border Grid.Row="0" Grid.Column="1"
+                                                    <Grid>
+                                                        <Border HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center"
                                                                 Width="{Binding #RootWindow.ItemsIconSize}"
                                                                 Height="{Binding #RootWindow.ItemsIconSize}"
-                                                                HorizontalAlignment="Center"
-                                                                VerticalAlignment="Center"
                                                                 Background="{DynamicResource AppBackgroundBrush}"
-                                                                CornerRadius="4"
+                                                                CornerRadius="0"
                                                                 Margin="0,0,0,8"
                                                                 BorderBrush="{DynamicResource ControlBorderBrush}"
                                                                 BorderThickness="1">
-                                                            <Image Grid.Column="1"
-                                                                   Source="{Binding Icon}"
+                                                            <Image Source="{Binding Icon}"
                                                                    Stretch="Uniform"
                                                                    HorizontalAlignment="Center"
                                                                    VerticalAlignment="Center"/>
                                                         </Border>
                                                     </Grid>
 
-                                                    <!-- Name -->
                                                     <StackPanel Grid.Row="1"
-                                                                Orientation="Horizontal"
-                                                                Spacing="6"
+                                                                Spacing="2"
                                                                 HorizontalAlignment="Center"
                                                                 VerticalAlignment="Center"
                                                                 Margin="0,0,0,8">
@@ -721,11 +631,15 @@
                                                                    FontWeight="SemiBold"
                                                                    TextWrapping="Wrap"
                                                                    TextAlignment="Center"
-                                                                   VerticalAlignment="Center"/>
-                                                        <TextBlock Text="{Binding Quality}"
+                                                                   HorizontalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding RefinementSummary}"
                                                                    Foreground="{DynamicResource SecondaryForegroundBrush}"
                                                                    FontSize="11"
+                                                                   Height="16"
+                                                                   TextWrapping="NoWrap"
+                                                                   TextTrimming="CharacterEllipsis"
                                                                    TextAlignment="Center"
+                                                                   HorizontalAlignment="Center"
                                                                    VerticalAlignment="Center"/>
                                                     </StackPanel>
                                                     <ItemsControl Grid.Row="2" ItemsSource="{Binding Rewards}">
@@ -741,7 +655,7 @@
                                                                         Background="{DynamicResource SecondaryBackgroundBrush}"
                                                                         HorizontalAlignment="Center"
                                                                         VerticalAlignment="Center"
-                                                                        CornerRadius="4"
+                                                                        CornerRadius="0"
                                                                         Margin="4"
                                                                         BorderThickness="1">
                                                                     <Border.Styles>
@@ -829,17 +743,12 @@
                                      PlaceholderText="Search weapon or stat"
                                      Padding="8,8"
                                      TextChanged="OnSearchRivensTextChanged"
-                                     VerticalAlignment="Center"
-                                     Background="{DynamicResource PanelBackgroundBrush}"
-                                     Foreground="{DynamicResource PrimaryForegroundBrush}"
-                                     BorderBrush="{DynamicResource ControlBorderBrush}"
-                                     BorderThickness="1"
-                                     CornerRadius="4"/>
+                                     VerticalAlignment="Center"/>
                         </Grid>
 
                         <Border Grid.Row="2"
                                 Background="{DynamicResource RivenPanelBackgroundBrush}"
-                                CornerRadius="8"
+                                CornerRadius="0"
                                 BorderBrush="{DynamicResource RivenTileBorderBrush}"
                                 BorderThickness="1">
 
@@ -854,7 +763,7 @@
                                     <ItemsRepeater.ItemTemplate>
                                         <DataTemplate x:DataType="riven:OwnedRiven">
                                             <Border Background="{DynamicResource RivenTileBackgroundBrush}"
-                                                    CornerRadius="6"
+                                                    CornerRadius="0"
                                                     Margin="8"
                                                     Padding="12"
                                                     Width="{Binding #RootWindow.ItemsTileWidth}"
@@ -870,7 +779,7 @@
                                                                 Height="{Binding #RootWindow.ItemsIconSize}"
                                                                 HorizontalAlignment="Center"
                                                                 Background="{DynamicResource RivenIconBackgroundBrush}"
-                                                                CornerRadius="4"
+                                                                CornerRadius="0"
                                                                 Margin="0,0,0,8"
                                                                 BorderBrush="{DynamicResource RivenTileBorderBrush}"
                                                                 BorderThickness="1">
@@ -879,7 +788,7 @@
 
                                                         <Border Grid.Column="1"
                                                                 Background="{Binding OverallGrade, Converter={x:Static local:RivenOverlayWindow.GradeBrushConverter}}"
-                                                                CornerRadius="4"
+                                                                CornerRadius="0"
                                                                 Padding="9,2"
                                                                 VerticalAlignment="Top"
                                                                 IsVisible="{Binding HasGrade}">
@@ -927,7 +836,7 @@
                                                                                VerticalAlignment="Center"/>
                                                                     <Border Grid.Column="2"
                                                                             Background="{Binding Grade, Converter={x:Static local:RivenOverlayWindow.GradeBrushConverter}}"
-                                                                            CornerRadius="3"
+                                                                            CornerRadius="0"
                                                                             Padding="5,1"
                                                                             VerticalAlignment="Center">
                                                                         <TextBlock Text="{Binding Grade}"
@@ -959,35 +868,44 @@
                 </Border>
             </Grid>
 
-            <!-- ─── RIGHT: Void Fissures Panel (always visible) ─── -->
-            <Border Grid.Column="1" Background="{DynamicResource SurfaceBackgroundBrush}" BorderBrush="{DynamicResource SeparatorBorderBrush}" BorderThickness="1,0,0,0" Padding="12">
+            <!-- ─── RIGHT: Void Fissures Panel (collapsible) ─── -->
+            <Border Grid.Column="1" Name="FissuresPanel" Background="{DynamicResource SurfaceBackgroundBrush}" BorderBrush="{DynamicResource SeparatorBorderBrush}" BorderThickness="1,0,0,0" Padding="12">
                 <Grid RowDefinitions="Auto,Auto,*">
-                    <!-- Title and Refresh -->
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,12">
-                        <TextBlock Grid.Column="0" Text="Void Fissures" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PrimaryForegroundBrush}" VerticalAlignment="Center"/>
-
-                        <Button Grid.Column="1" Name="FilterListButton" Click="OnFilterListClick" Classes="iconButton" Margin="0,0,5,0" ToolTip.Tip="Fissure Alert Settings">
-                            <Image Source="avares://framenion/assets/filter.png" VerticalAlignment="Center"/>
+                    <!-- Title and Refresh: the drawer toggle sits to the left of the label -->
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,0,0,12">
+                        <Button Grid.Column="0"
+                                Name="FissuresDrawerButton"
+                                Click="OnToggleFissuresDrawerClick"
+                                Classes="iconButton"
+                                Margin="0,0,8,0"
+                                ToolTip.Tip="Hide Void Fissures panel">
+                            <Image Name="FissuresDrawerIcon" Source="avares://framenion/assets/sidebar_close.png" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                         </Button>
 
-                        <Button Grid.Column="2" Name="RefreshFissuresButton" Content="↻" Click="OnRefreshFissuresClick" Classes="iconButton" ToolTip.Tip="Refresh fissures list"/>
+                        <TextBlock Grid.Column="1" Name="FissuresTitleText" Text="FISSURES" FontSize="16" FontWeight="Bold" FontFamily="Cascadia Mono,Consolas,ui-monospace,monospace" LetterSpacing="1.5" Foreground="{DynamicResource PrimaryForegroundBrush}" VerticalAlignment="Center"/>
+
+                        <Button Grid.Column="2" Name="FissuresDifficultyButton" Click="OnFissureFilterClick" Classes="iconButton" ToolTip.Tip="Normal">
+                            <Image Source="avares://framenion/assets/normal.png" RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                        </Button>
+
+                        <Button Grid.Column="3" Name="FilterListButton" Click="OnFilterListClick" Classes="iconButton" ToolTip.Tip="Fissure Alert Settings">
+                            <Image Source="avares://framenion/assets/filter.png" RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                        </Button>
+
+                        <Button Grid.Column="4" Name="RefreshFissuresButton" Click="OnRefreshFissuresClick" Classes="iconButton" ToolTip.Tip="Refresh fissures list">
+                            <Image Source="avares://framenion/assets/reset.png" RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                        </Button>
                     </Grid>
 
-                    <!-- Filter Buttons -->
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,0,0,12">
-                        <Button Name="FissureFilterNormalButton" Content="Normal" Click="OnFissureFilterClick" Tag="Normal" Classes="selected" Padding="12,6"/>
-                        <Button Name="FissureFilterSteelPathButton" Content="Steel Path" Click="OnFissureFilterClick" Tag="SteelPath" Padding="12,6"/>
-                    </StackPanel>
-
                     <!-- Fissures List -->
-                    <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer Grid.Row="2" Name="FissuresListScrollViewer" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                         <ItemsControl Name="FissuresList">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="src:VoidFissure">
                                     <Border Background="{Binding RowBackground}"
                                             BorderBrush="{Binding RowBorderBrush}"
                                             BorderThickness="{Binding RowBorderThickness}"
-                                            CornerRadius="6"
+                                            CornerRadius="0"
                                             Margin="0,0,0,6"
                                             Padding="10">
                                         <Grid RowDefinitions="Auto,Auto,Auto">
@@ -1001,7 +919,7 @@
 
                                                 <Border Grid.Column="1"
                                                         Background="{DynamicResource ButtonHoverBackgroundBrush}"
-                                                        CornerRadius="4"
+                                                        CornerRadius="0"
                                                         Padding="6,3">
                                                     <TextBlock Text="{Binding TimeRemaining}" Foreground="{DynamicResource AccentBrush}" FontSize="12" FontWeight="Bold"/>
                                                 </Border>

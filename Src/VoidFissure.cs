@@ -11,7 +11,7 @@ namespace framenion.Src;
 public class VoidFissure : INotifyPropertyChanged
 {
 	private static readonly IBrush notifyBackground = new SolidColorBrush(Avalonia.Media.Color.Parse("#332B00"));
-	private static readonly IBrush normalBackground = new SolidColorBrush(Avalonia.Media.Color.Parse("#252525"));
+	private static readonly IBrush normalBackground = new SolidColorBrush(Avalonia.Media.Color.Parse("#0D0D0D"));
 	private static readonly IBrush notifyBorder = new SolidColorBrush(Avalonia.Media.Color.Parse("#FFD700"));
 	private static readonly IBrush normalBorder = new SolidColorBrush(Avalonia.Media.Color.Parse("#4A4A4A"));
 	private static readonly Thickness notifyThickness = new(2);

@@ -19,6 +19,7 @@ public partial class SettingsWindow : Window
 	{
 		InitializeComponent();
 		WindowStartupLocation = WindowStartupLocation.CenterOwner;
+		this.UseDarkTitleBar();
 		Opened += async (_, _) => await LoadAsync();
 		// Leaving the hook in capture mode would swallow every keystroke system-wide.
 		Closed += (_, _) => CancelCapture();

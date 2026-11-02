@@ -10,7 +10,7 @@ namespace framenion.Src;
 
 public sealed class AppSettings
 {
-	private const string defaultAccent = "#4A9EFF";
+	private const string defaultAccent = "#C3D9F3";
 
 	public string AccentColor { get; set; } = defaultAccent;
 	public bool EnableNotifications { get; set; } = true;
@@ -29,10 +29,6 @@ public sealed class AppSettings
 
 	public static string SettingsPath => Path.Combine(AppData.AppDataDir, "settings.json");
 
-	/// <summary>
-	/// Synchronous because the settings have to be in place before the main window is built:
-	/// the monitor and the OCR overlay both read them during construction.
-	/// </summary>
 	public static AppSettings Load()
 	{
 		try {
@@ -81,11 +77,6 @@ public sealed class AppSettings
 		return settings;
 	}
 
-	/// <summary>
-	/// Stored by name so the file stays readable and survives a reordering of Avalonia's Key
-	/// enum. An unknown name falls back to the default rather than leaving the app with no
-	/// working hotkey.
-	/// </summary>
 	private static Key ReadHotkey(JsonElement root, string property, Key fallback)
 	{
 		if (!root.TryGetProperty(property, out var p) || p.ValueKind != JsonValueKind.String) return fallback;

@@ -11,18 +11,18 @@
       <TextBlock Grid.Column="1" Text="Mouse over options for more info." FontSize="13" Foreground="{DynamicResource SecondaryForegroundBrush}" Margin="0,0,0,12" VerticalAlignment="Bottom"/>
             </Grid>
       <!-- Appearance Section -->
-      <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+      <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="0" Padding="10" Margin="0,0,0,8">
         <StackPanel>
           <TextBlock Text="Appearance" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PrimaryForegroundBrush}" Margin="0,0,0,8"/>
           <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="10">
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="Accent Color" Foreground="{DynamicResource SecondaryForegroundBrush}" VerticalAlignment="Center" ToolTip.Tip="Accent color (e.g. #4A9EFF)"/>
-            <TextBox Grid.Row="0" Grid.Column="1" Name="AccentColorBox" PlaceholderText="#4A9EFF"/>
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Accent Color" Foreground="{DynamicResource SecondaryForegroundBrush}" VerticalAlignment="Center" ToolTip.Tip="Accent color (e.g. #C3D9F3)"/>
+            <TextBox Grid.Row="0" Grid.Column="1" Name="AccentColorBox" PlaceholderText="#C3D9F3"/>
           </Grid>
         </StackPanel>
       </Border>
 
       <!-- Miscellaneous Section -->
-      <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+      <Border Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="0" Padding="10" Margin="0,0,0,8">
         <StackPanel>
           <TextBlock Text="Miscellaneous" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PrimaryForegroundBrush}" Margin="0,0,0,8"/>
           <StackPanel Spacing="8">

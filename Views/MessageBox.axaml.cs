@@ -18,6 +18,7 @@ public partial class MessageBox : Window
 	{
 		InitializeComponent();
 		DataContext = this;
+		this.UseDarkTitleBar();
 	}
 
 	public MessageBox(string message, string title, bool showCancelButton = false, string okButtonText = "OK", string cancelButtonText = "Cancel")
@@ -29,6 +30,7 @@ public partial class MessageBox : Window
 		InitializeComponent();
 		DataContext = this;
 		Title = title;
+		this.UseDarkTitleBar();
 	}
 
 	/// <summary>

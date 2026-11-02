@@ -44,7 +44,7 @@
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Background="{Binding BackgroundColor}"
-                                CornerRadius="4"
+                                CornerRadius="0"
                                 Margin="4"
                                 BorderThickness="1">
                             <Grid>

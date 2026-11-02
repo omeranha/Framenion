@@ -104,6 +104,7 @@ public partial class ScanRegionsWindow : Window
 	{
 		InitializeComponent();
 		DataContext = this;
+		this.UseDarkTitleBar();
 
 		var saved = AppData.AppSettings.Regions;
 		foreach (var kind in ScanRegions.EditOrder) {
