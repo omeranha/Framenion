@@ -16,6 +16,7 @@
     <Border Padding="12">
         <Grid RowDefinitions="Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Name="NameItem" Text="{Binding ItemName}" FontSize="15" Foreground="{DynamicResource PrimaryForegroundBrush}" HorizontalAlignment="Center" TextWrapping="Wrap"/>
+            <Image Grid.Row="0" Grid.Column="1" Name="MasteredIcon" Source="avares://framenion/assets/mastered.png" Width="24" Height="24" HorizontalAlignment="Right" VerticalAlignment="Top" IsVisible="{Binding IsMastered}"/>
             
             <StackPanel Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="10,10,10,10">
                 <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="15">

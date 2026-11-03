@@ -20,18 +20,20 @@ public partial class RelicRewardWindow : Window
 	public string Price { get; set; } = string.Empty;
 	public ObservableCollection<RecipeIngredient> SetItems { get; set; } = [];
 	public string SetName { get; set; } = string.Empty;
+	public bool IsMastered { get; set; } = false;
 
 	public RelicRewardWindow()
 	{
 		InitializeComponent();
 	}
 
-	public RelicRewardWindow(string name, string price, string ducats, ObservableCollection<RecipeIngredient> setItems, string setName, int x, int y, int width)
+	public RelicRewardWindow(string name, string price, string ducats, ObservableCollection<RecipeIngredient> setItems, string setName, int x, int y, int width, bool isMastered = false) : this()
 	{
 		ItemName = name;
 		Ducats = ducats;
 		Price = price;
 		SetItems = setItems;
+		IsMastered = isMastered;
 		SetName = setName;
 		InitializeComponent();
 		DataContext = this;
@@ -53,14 +55,16 @@ public partial class RelicRewardWindow : Window
 			GameData.DucatsByName.TryGetValue(itemName, out int ducats);
 			var setItems = new ObservableCollection<RecipeIngredient>();
 			string setName = string.Empty;
+			bool mastered = false;
 			if (GameData.ItemsByIngredientName.TryGetValue(itemName, out var parentItem)) {
 				setName = $"{parentItem.Name} Set";
 				foreach (var ingredient in parentItem.Ingredients.Where(i => !string.IsNullOrEmpty(i.Ducats))) {
 					setItems.Add(ingredient);
 				}
+				mastered = parentItem.Mastered;
 			}
 
-			var win = new RelicRewardWindow(itemName, market?.Price ?? "", ducats > 0 ? ducats.ToString() : "", setItems, setName, x, y, width);
+			var win = new RelicRewardWindow(itemName, market?.Price ?? "", ducats > 0 ? ducats.ToString() : "", setItems, setName, x, y, width, mastered);
 			try {
 				win.ShowActivated = false;
 			} catch (Exception ex) {

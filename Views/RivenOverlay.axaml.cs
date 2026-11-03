@@ -36,6 +36,17 @@ public partial class RivenOverlayWindow : Window
 	public IBrush OverallGradeBrush { get; private set; } = gradeB;
 	public List<GradedRivenStat> Stats { get; private set; } = [];
 
+	/// <summary>The community "best rolls" sheet's suggestion(s) for this weapon, if it has one.</summary>
+	public IReadOnlyList<RivenRollOption> BestRolls { get; private set; } = [];
+	public bool HasBestRolls => BestRolls.Count > 0;
+
+	/// <summary>Positives/negatives collapsed for display; see <see cref="RivenRollGuide.BuildGroups"/>.</summary>
+	public IReadOnlyList<RivenRollGroup> BestRollGroups { get; private set; } = [];
+
+	/// <summary>Every option's note, shown once after all of them rather than between each pair.</summary>
+	public string BestRollNotes { get; private set; } = "";
+	public bool HasBestRollNotes => BestRollNotes.Length > 0;
+
 	/// <summary>Last anchor, replayed when layout changes the window's size.</summary>
 	private PixelBounds anchorCard;
 	private int anchorX;
@@ -122,6 +133,9 @@ public partial class RivenOverlayWindow : Window
 	private void Apply(RivenScanResult result)
 	{
 		WeaponName = result.WeaponName.Length > 0 ? result.WeaponName : "Unknown weapon";
+		BestRolls = result.WeaponName.Length > 0 ? RivenRollGuide.FindBestRolls(result.WeaponName) ?? [] : [];
+		BestRollGroups = RivenRollGuide.BuildGroups(BestRolls);
+		BestRollNotes = string.Join('\n', BestRolls.Select(o => o.Notes).Where(n => n.Length > 0));
 		Stats = result.Grade != null
 			? [.. result.Grade.Stats]
 			: [.. result.Stats.Select(s => new GradedRivenStat {
@@ -139,7 +153,7 @@ public partial class RivenOverlayWindow : Window
 			OverallGrade = grade.OverallGrade;
 			OverallGradeBrush = BrushForGrade(grade.OverallGrade);
 			var type = grade.RivenTypeName.Length > 0 ? grade.RivenTypeName : "Riven";
-			Subtitle = $"{type}  ·  dispo {grade.Disposition.ToString("0.00", CultureInfo.InvariantCulture)}"
+			Subtitle = $"·  dispo {grade.Disposition.ToString("0.00", CultureInfo.InvariantCulture)}"
 				+ $"  ·  rank {grade.AssumedRank}  ·  {grade.StatPerfectness * 100:0}% roll";
 		} else {
 			OverallGrade = "";

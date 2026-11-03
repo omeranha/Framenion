@@ -178,7 +178,8 @@
                                                     Width="{Binding #RootWindow.ItemsTileWidth}"
                                                     MinHeight="{Binding #RootWindow.ItemsTileMinHeight}"
                                                     BorderBrush="{Binding BorderColor}"
-                                                    BorderThickness="2">
+                                                    BorderThickness="2"
+                                                    ToolTip.Tip="{Binding RivenRollsTip}">
 
                                                 <Grid RowDefinitions="Auto,Auto,Auto,*">
                                                      <StackPanel Grid.Row="0" Grid.Column="0"  HorizontalAlignment="Left" VerticalAlignment="Top" IsVisible="{Binding IsPriceVisible}">

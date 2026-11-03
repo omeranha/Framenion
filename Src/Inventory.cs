@@ -16,8 +16,8 @@ public sealed class InventorySummary
 }
 
 /// <summary>
-/// Reads the inventory dump produced by warframe-api-helper and projects it onto the catalogue:
-/// owned counts, mastery state and the tile border colours.
+/// Reads the inventory downloaded by <see cref="WarframeApi"/> and projects it onto the
+/// catalogue: owned counts, mastery state and the tile border colours.
 /// </summary>
 public static class Inventory
 {

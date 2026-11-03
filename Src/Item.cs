@@ -1,4 +1,5 @@
 using Avalonia.Media.Imaging;
+using framenion.Src.Riven;
 using System.Collections.ObjectModel;
 
 namespace framenion.Src;
@@ -20,6 +21,9 @@ public class Item(string name, string type, ObservableCollection<RecipeIngredien
 	public string Price { get; set; } = price;
 
 	public bool IsPriceVisible => !string.IsNullOrEmpty(Price);
+
+	/// <summary>Set only for riven-capable weapons the community "best rolls" sheet lists; null hides the tooltip.</summary>
+	public RivenRollsTooltip? RivenRollsTip { get; set; }
 }
 
 public class RecipeIngredient(string name, string type, int count, string iconPath, string price = "", string ducats = "")

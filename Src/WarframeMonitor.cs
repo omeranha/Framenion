@@ -54,35 +54,51 @@ public class WarframeMonitor : IDisposable
 		StopLogReader();
 	}
 
-	private void FindProcess()
+	/// <summary>The game's process id, or 0 when it is not running.</summary>
+	public static int FindProcessId()
 	{
-		var processes = Process.GetProcessesByName("Warframe.x64");
+		int id = FirstProcessId("Warframe.x64");
+		// Linux clips a reported process name to 15 characters, so the Wine-hosted
+		// "Warframe.x64.exe" answers to a spelling Windows never produces.
+		return id != 0 || OperatingSystem.IsWindows() ? id : FirstProcessId("Warframe.x64.ex");
+	}
+
+	private static int FirstProcessId(string name)
+	{
+		var processes = Process.GetProcessesByName(name);
 		try {
-			var process = processes.Length > 0 ? processes[0] : null;
-			bool running = process != null;
-			if (running == lastRunning) return;
-
-			lastRunning = running;
-			if (running) {
-				warframeId = (uint)process!.Id;
-				if (enableReader) {
-					StartLogReader();
-				}
-			} else {
-				warframeId = 0;
-				StopLogReader();
-			}
-
-			Dispatcher.UIThread.Post(() =>
-			{
-				OnProcessStateChanged?.Invoke(running);
-			});
+			return processes.Length > 0 ? processes[0].Id : 0;
 		} finally {
 			// This runs every 1.5s for the life of the app; the handles have to go back.
 			foreach (var process in processes) {
 				process.Dispose();
 			}
 		}
+	}
+
+	private void FindProcess()
+	{
+		int processId = FindProcessId();
+		bool running = processId != 0;
+		if (running == lastRunning) return;
+
+		lastRunning = running;
+		if (running) {
+			warframeId = (uint)processId;
+			if (enableReader) {
+				StartLogReader();
+			}
+		} else {
+			warframeId = 0;
+			StopLogReader();
+			// The API session token belongs to the client that authenticated with it.
+			WarframeApi.InvalidateSession();
+		}
+
+		Dispatcher.UIThread.Post(() =>
+		{
+			OnProcessStateChanged?.Invoke(running);
+		});
 	}
 
 	private void StartLogReader()

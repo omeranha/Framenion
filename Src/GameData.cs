@@ -4,7 +4,6 @@ using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -348,7 +347,9 @@ public static class GameData
 			string name = Catalog.TryGetValue(type, out var entry) ? entry.Name : CleanDisplayName(item.Name);
 			var category = ResolveCategory(type, item);
 			WFMarketData.TryGetValue($"{name} Set", out var marketData);
-			items.Add(new Item(name, type, BuildIngredients(name, type, blueprintPath), category, GetLocalIconPath(item.Icon), false, marketData?.Price ?? ""));
+			items.Add(new Item(name, type, BuildIngredients(name, type, blueprintPath), category, GetLocalIconPath(item.Icon), false, marketData?.Price ?? "") {
+				RivenRollsTip = ToRivenRollsTip(name),
+			});
 		}
 		items.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
 		ItemsList = items;
@@ -491,6 +492,16 @@ public static class GameData
 
 	private static string Ducats(int value) => value > 0 ? value.ToString() : "";
 
+	/// <summary>Null when the weapon has no entry in the community "best rolls" sheet, or that sheet has not loaded.</summary>
+	private static Riven.RivenRollsTooltip? ToRivenRollsTip(string weaponName)
+	{
+		if (weaponName.Contains("Prime", StringComparison.OrdinalIgnoreCase)) {
+			weaponName = weaponName.Replace(" Prime", "", StringComparison.OrdinalIgnoreCase);
+		}
+		var options = Riven.RivenRollGuide.FindBestRolls(weaponName);
+		return options is { Count: > 0 } ? new Riven.RivenRollsTooltip(weaponName, options) : null;
+	}
+
 	/// <summary>
 	/// Live platinum prices. Not part of DE's export, so this is best effort and never fatal:
 	/// the rest of the app works without it.
@@ -615,99 +626,6 @@ public static class GameData
 		=> double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsed) && parsed > 0
 			? parsed
 			: 0;
-
-	public static async Task ExtractGameInfo()
-	{
-		Directory.CreateDirectory(AppData.AppDataDir);
-		bool isWindows = OperatingSystem.IsWindows();
-		var exeFileName = isWindows ? "warframe-api-helper.exe" : "warframe-api-helper";
-		var exePath = Path.Combine(AppData.AppDataDir, exeFileName);
-		if (!File.Exists(exePath)) {
-			if (!await Notify.Confirm("Download required component", "Do you want to download warframe-api-helper from its official GitHub repository?", "Yes", "No")) {
-				return;
-			}
-
-			string url = isWindows
-				? "https://github.com/Sainan/warframe-api-helper/releases/download/1.1.1/warframe-api-helper.exe"
-				: "https://github.com/Sainan/warframe-api-helper/releases/download/1.1.1/Linux.zip";
-			var tempPath = Path.Combine(AppData.AppDataDir, Path.GetRandomFileName());
-			try {
-				using var inStream = await AppData.GetStreamAsync(url);
-				using var outStream = File.Create(tempPath);
-				await inStream.CopyToAsync(outStream);
-				outStream.Close();
-
-				if (!isWindows && url.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) {
-					try {
-						System.IO.Compression.ZipFile.ExtractToDirectory(tempPath, AppData.AppDataDir);
-						var extracted = Directory.EnumerateFiles(AppData.AppDataDir, "warframe-api-helper*", SearchOption.AllDirectories)
-							.FirstOrDefault(f => Path.GetFileName(f).StartsWith("warframe-api-helper", StringComparison.Ordinal)) ?? throw new FileNotFoundException("Extracted helper not found.");
-						if (File.Exists(exePath)) File.Delete(exePath);
-						File.Move(extracted, exePath);
-					} finally {
-						try { File.Delete(tempPath); } catch { /* best effort */ }
-					}
-
-					try {
-						using var chmod = Process.Start(new ProcessStartInfo {
-							FileName = "chmod",
-							Arguments = $"+x \"{exePath}\"",
-							UseShellExecute = false,
-							CreateNoWindow = true
-						});
-						if (chmod != null) await chmod.WaitForExitAsync();
-					} catch (Exception ex) {
-						Log.Warn("Could not mark the helper executable; it may fail to start.", ex);
-					}
-				} else {
-					if (File.Exists(exePath)) File.Delete(exePath);
-					File.Move(tempPath, exePath);
-				}
-			} catch (Exception ex) {
-				try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { /* best effort */ }
-				Log.Error("Failed to download warframe-api-helper.", ex);
-				Notify.Error("Error", "Failed to download component: " + ex.Message);
-				return;
-			}
-		}
-
-		if (!await Notify.Confirm("Disclaimer", "By confirming, you acknowledge and agree to use warframe-api-helper to retrieve your inventory data at your own risk.", "Confirm", "Close")) {
-			Notify.Toast("Info", "Operation cancelled by user.");
-			return;
-		}
-
-		using var process = new Process {
-			StartInfo = new ProcessStartInfo {
-				FileName = exePath,
-				WorkingDirectory = AppData.AppDataDir,
-				UseShellExecute = false,
-				RedirectStandardOutput = true,
-				RedirectStandardError = true,
-				RedirectStandardInput = true,
-				CreateNoWindow = true,
-			}
-		};
-
-		process.Start();
-		try {
-			await process.StandardInput.WriteLineAsync();
-			await process.StandardInput.FlushAsync();
-			process.StandardInput.Close();
-		} catch (Exception ex) {
-			Log.Warn("Could not write to the helper's standard input.", ex);
-		}
-
-		var stdoutTask = process.StandardOutput.ReadToEndAsync();
-		var stderrTask = process.StandardError.ReadToEndAsync();
-		await process.WaitForExitAsync();
-		var stdout = await stdoutTask;
-		var stderr = await stderrTask;
-		if (process.ExitCode != 0) {
-			var msg = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr + Environment.NewLine + stdout;
-			Log.Error($"warframe-api-helper exited with {process.ExitCode}: {msg}");
-			Notify.Error("warframe-api-helper error", msg);
-		}
-	}
 
 	public static long XpToMaster(string type)
 	{

@@ -301,6 +301,8 @@ public partial class MainWindow : Window
 				await PublicExport.LoadAsync();
 				GameData.BuildIndexes();
 				await GameData.LoadWFMarketData(updateFile: false);
+				await RivenRollGuide.SyncAsync();
+				RivenRollGuide.Load();
 				await GameData.BuildCatalogAsync();
 			});
 
@@ -909,7 +911,7 @@ public partial class MainWindow : Window
 	{
 		try {
 			IsLoading = true;
-			await GameData.ExtractGameInfo();
+			await WarframeApi.FetchInventoryAsync();
 			var summary = await Task.Run(Inventory.LoadAsync);
 			ApplyInventorySummary(summary);
 			RefreshItemsList();

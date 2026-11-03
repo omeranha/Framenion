@@ -3,6 +3,7 @@
              x:Class="framenion.App"
              xmlns:local="using:framenion"
              xmlns:src="using:framenion.Src"
+             xmlns:riven="using:framenion.Src.Riven"
              x:DataType="local:App"
              RequestedThemeVariant="Dark">
     <Application.DataContext>
@@ -21,6 +22,24 @@
                     <Image Grid.Column="0" Grid.Row="1" Source="avares://framenion/assets/ducats.png" Width="20" Height="20" VerticalAlignment="Center"/>
                     <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding Ducats}" Foreground="{DynamicResource PrimaryForegroundBrush}" VerticalAlignment="Center" FontWeight="Bold"/>
                 </Grid>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- Shown when hovering a weapon tile the community "best rolls" sheet has an entry for. -->
+        <DataTemplate DataType="riven:RivenRollsTooltip">
+            <StackPanel Orientation="Vertical" Spacing="8" MaxWidth="300">
+                <TextBlock Text="BEST RIVEN ROLLS" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SecondaryForegroundBrush}"/>
+                <ItemsControl ItemsSource="{Binding Groups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="riven:RivenRollGroup">
+                            <StackPanel Orientation="Vertical" Spacing="2" Margin="0,0,0,8">
+                                <TextBlock Text="{Binding PositivesText}" TextWrapping="Wrap" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryForegroundBrush}" IsVisible="{Binding HasPositives}"/>
+                                <TextBlock Text="{Binding NegativesText}" TextWrapping="Wrap" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryForegroundBrush}" IsVisible="{Binding HasNegatives}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding NotesText}" TextWrapping="Wrap" FontStyle="Italic" FontSize="12" Foreground="{DynamicResource SecondaryForegroundBrush}" IsVisible="{Binding HasNotes}"/>
             </StackPanel>
         </DataTemplate>
     </Application.DataTemplates>
