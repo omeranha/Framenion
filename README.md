@@ -2,6 +2,9 @@
 
 Framenion is a fast, lightweight Warframe companion desktop app built with Avalonia UI.
 
+<img width="1269" height="737" alt="image" src="https://github.com/user-attachments/assets/400fce1c-01e1-4015-b4dd-e7fb6fd932e3" />
+
+
 ## Features
 
 - Equipment browser with:
@@ -20,6 +23,8 @@ Framenion is a fast, lightweight Warframe companion desktop app built with Avalo
   - Owned counts, refinement tier and the rewards each relic drops
   - A toggle to hide relics you do not own, and sorting by era, name, owned count or refinement
   - Search by relic name or by the reward it contains
+  <img width="978" height="653" alt="image" src="https://github.com/user-attachments/assets/8d674b4c-6b8a-4f23-997d-a674569b6700" />
+
 - Riven browser with:
   - Every riven you own, graded per stat and overall
   - The riven's generated name, disposition, mastery requirement, reroll count and polarity
